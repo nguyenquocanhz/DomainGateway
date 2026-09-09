@@ -82,6 +82,25 @@ def _giau_phien_ban_werkzeug() -> None:
 _giau_phien_ban_werkzeug()
 
 
+def _van_ban(gia_tri: object, khi_vang=None):
+    """Ep mot truong van ban ve chuoi. Kieu phuc hop coi nhu khong gui.
+
+    Client gui gi cung duoc, nen truong van ban co the la dict hay list. Dua
+    thang xuong sqlite la ProgrammingError -> 500; con str(dict) thi ghi nguyen
+    chuoi "{'a': 1}" vao DB, im lang va ban hon. Ca hai deu sai, nen coi nhu
+    khong gui truong do.
+
+    So va bool duoc nhan vi nguoi dung go "2027" vao o van ban la chuyen thuong.
+    """
+    if gia_tri is None:
+        return khi_vang
+    if isinstance(gia_tri, str):
+        return gia_tri
+    if isinstance(gia_tri, (int, float)) and not isinstance(gia_tri, bool):
+        return str(gia_tri)
+    return khi_vang
+
+
 def _than_json() -> dict:
     """Than request duoi dang dict, luon luon.
 
@@ -305,16 +324,16 @@ def create_app(cfg: dict = None, store: Store = None) -> Flask:
                 continue
             store.add(
                 domain,
-                provider=payload.get("provider", ""),
-                tags=payload.get("tags") or [],
-                note=payload.get("note", ""),
+                provider=_van_ban(payload.get("provider"), ""),
+                tags=[t for t in (payload.get("tags") or []) if isinstance(t, str)],
+                note=_van_ban(payload.get("note"), ""),
                 manual_expires_at=payload.get("expires_at"),
                 auto_renew=payload.get("auto_renew"),
                 pinned=bool(payload.get("pinned")),
             )
             added.append(domain)
         if not added:
-            return jsonify({"error": "Khong co tên miền hợp lệ", "skipped": skipped}), 400
+            return jsonify({"error": "Không có tên miền hợp lệ", "skipped": skipped}), 400
         if payload.get("lookup", True):
             _spawn_refresh(added)
         return jsonify({"added": added, "skipped": skipped}), 201
@@ -327,9 +346,11 @@ def create_app(cfg: dict = None, store: Store = None) -> Flask:
         payload = _than_json()
         store.update_user_fields(
             domain,
-            provider=payload.get("provider"),
-            tags=payload.get("tags"),
-            note=payload.get("note"),
+            provider=_van_ban(payload.get("provider")),
+            # Giu list rong (= xoa het tag) nhung loai phan tu khong phai chuoi
+            tags=([t for t in payload["tags"] if isinstance(t, str)]
+                  if isinstance(payload.get("tags"), list) else None),
+            note=_van_ban(payload.get("note")),
             # Co mat khoa "expires_at" voi gia tri null = XOA ngay nhap tay
             # (hop nhap moi dung "de trong de xoa"). Vang mat khoa = giu nguyen.
             manual_expires_at=(payload["expires_at"] if "expires_at" in payload
@@ -385,7 +406,19 @@ def create_app(cfg: dict = None, store: Store = None) -> Flask:
     @app.post("/api/refresh")
     def api_refresh():
         payload = _than_json()
-        names = payload.get("domains") or store.names()
+        xin = payload.get("domains")
+        # Phai kiem KIEU chu khong chi truthy. Mot chuoi cung lap duoc:
+        # {"domains": "abc.com"} tung tra 200 roi tra cuu that cho 'a','b','c',
+        # 'c','o','m' - sau luot goi mang, dot quota BKNS, ma nguoi gui tuong
+        # minh vua lam dung.
+        if xin is None or xin == []:
+            names = store.names()
+        elif isinstance(xin, list):
+            names = [n for n in xin if isinstance(n, str)]
+            if not names:
+                return jsonify({"error": "Danh sách tên miền phải là chuỗi"}), 400
+        else:
+            return jsonify({"error": "`domains` phải là danh sách tên miền"}), 400
         names = [normalize_domain(n) for n in names if n]
         if not names:
             return jsonify({"error": "Kho trống"}), 400
@@ -453,16 +486,19 @@ def create_app(cfg: dict = None, store: Store = None) -> Flask:
                     return jsonify({"error": f"Giá trị không hợp lệ cho {key}"}), 400
 
         # Token rong nghia la "giu nguyen cai dang co", khong phai "xoa di"
-        token = (payload.get("telegram_bot_token") or "").strip()
+        token = (_van_ban(payload.get("telegram_bot_token"), "") or "").strip()
         if token:
             notify_changes["telegram_bot_token"] = token
         if "telegram_chat_id" in payload:
-            notify_changes["telegram_chat_id"] = str(payload["telegram_chat_id"]).strip()
+            # _van_ban chu khong phai str(): str({"a":1}) ghi nguyen chuoi
+            # "{'a': 1}" vao config.json, im lang.
+            notify_changes["telegram_chat_id"] = (
+                _van_ban(payload["telegram_chat_id"], "") or "").strip()
         if notify_changes:
             changes["notify"] = notify_changes
 
         # Rong = giu nguyen cai dang co, giong token Telegram
-        cf_token = (payload.get("cloudflare_api_token") or "").strip()
+        cf_token = (_van_ban(payload.get("cloudflare_api_token"), "") or "").strip()
         if cf_token:
             changes["cloudflare_api_token"] = cf_token
 
