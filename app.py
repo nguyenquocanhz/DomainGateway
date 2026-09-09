@@ -82,6 +82,32 @@ def _giau_phien_ban_werkzeug() -> None:
 _giau_phien_ban_werkzeug()
 
 
+def _danh_ba_hop_le(sections) -> bool:
+    """Kiem hinh dang payload danh ba truoc khi dan PDF.
+
+    registry_pdf() goi sec.get(...), item.get(...) va " ".join(tlds) tren noi
+    dung nguoi gui, nen mot phan tu sai kieu la TypeError -> 500. Loi cua nguoi
+    gui phai tra 400.
+
+    Phai kiem KIEU cua ca danh sach truoc khi lap qua no: `all(... for x in 5)`
+    tu no da nem TypeError. Ban kiem dau tien o day dinh dung cai bay do.
+    """
+    if not isinstance(sections, list):
+        return False
+    for sec in sections:
+        if not isinstance(sec, dict):
+            return False
+        tlds = sec.get("tlds") or []
+        items = sec.get("items") or []
+        if not isinstance(tlds, list) or not isinstance(items, list):
+            return False
+        if any(not isinstance(x, str) for x in tlds):
+            return False
+        if any(not isinstance(x, dict) for x in items):
+            return False
+    return True
+
+
 def _che_token(token: str) -> str:
     """Che bot token, chi de lo phan von cong khai.
 
@@ -291,7 +317,10 @@ def create_app(cfg: dict = None, store: Store = None) -> Flask:
             provider=payload.get("provider"),
             tags=payload.get("tags"),
             note=payload.get("note"),
-            manual_expires_at=payload.get("expires_at"),
+            # Co mat khoa "expires_at" voi gia tri null = XOA ngay nhap tay
+            # (hop nhap moi dung "de trong de xoa"). Vang mat khoa = giu nguyen.
+            manual_expires_at=(payload["expires_at"] if "expires_at" in payload
+                               else "__keep__"),
             auto_renew=payload["auto_renew"] if "auto_renew" in payload else "__keep__",
             pinned=payload.get("pinned"),
         )
@@ -603,16 +632,7 @@ def create_app(cfg: dict = None, store: Store = None) -> Flask:
         Bo loc nam o JavaScript; neu server loc lai thi phai viet lan thu hai
         bang Python va hai ban chac chan se lech nhau."""
         payload = request.get_json(silent=True) or {}
-        sections = payload.get("sections")
-        # Kiem tung phan tu chu khong chi kieu cua ca danh sach: registry_pdf()
-        # goi sec.get(...) va " ".join(...) tren noi dung ben trong, nen mot
-        # phan tu la chuoi hay mot tlds chua so se nem TypeError -> 500. Loi
-        # cua nguoi gui thi phai tra 400, dung 500.
-        if not isinstance(sections, list) or not all(
-            isinstance(s, dict)
-            and all(isinstance(x, str) for x in (s.get("tlds") or []))
-            for s in sections
-        ):
+        if not _danh_ba_hop_le(payload.get("sections")):
             return jsonify({"error": "Thiếu danh sách khu vực, hoặc sai định dạng"}), 400
         try:
             data = exporters.registry_pdf(payload)

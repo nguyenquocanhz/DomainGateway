@@ -120,7 +120,8 @@ def cmd_set(args, store: Store, cfg: dict) -> int:
         provider=args.provider,
         tags=[t.strip() for t in args.tags.split(",") if t.strip()] if args.tags is not None else None,
         note=args.note,
-        manual_expires_at=args.expires,
+        # --expires "" xoa ngay nhap tay; khong truyen --expires thi giu nguyen
+        manual_expires_at="__keep__" if args.expires is None else args.expires,
         auto_renew=args.auto_renew if args.auto_renew is not None else "__keep__",
         pinned=args.pin,
     )

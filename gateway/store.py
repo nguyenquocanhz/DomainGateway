@@ -223,10 +223,11 @@ class Store:
                 # hay chay `cli.py import` lan hai - la xoa sach tag, bo ghim,
                 # xoa auto_renew, khong mot dong canh bao.
                 #
-                # Mat ghim la nang nhat: _row_to_record chi cho manual_expires_at
-                # thang khi pinned bat, nen ngay het han nguoi dung co y nhap tay
-                # lang le ngung co tac dung trong khi cot do van con nguyen trong
-                # DB - nhin thang vao du lieu khong thay gi bat thuong.
+                # Mat ghim la nang nhat: _row_to_record cho manual_expires_at
+                # thang khi pinned bat HOAC khi registry im lang. Bo ghim mot ten
+                # mien DA co ngay tu registry la ngay nhap tay lang le ngung co
+                # tac dung, trong khi cot do van con nguyen trong DB - nhin thang
+                # vao du lieu khong thay gi bat thuong.
                 #
                 # Muon XOA tag hay BO ghim thi dung PATCH /api/domains/<domain>,
                 # duong do gui gia tri tuong minh nen van lam duoc.
@@ -235,7 +236,8 @@ class Store:
                     provider=provider or None,
                     tags=tags or None,
                     note=note or None,
-                    manual_expires_at=manual_expires_at,
+                    manual_expires_at=("__keep__" if manual_expires_at is None
+                                       else manual_expires_at),
                     auto_renew="__keep__" if auto_renew is None else auto_renew,
                     pinned=pinned or None,
                 )
@@ -259,7 +261,15 @@ class Store:
             conn.execute("DELETE FROM history WHERE domain = ?", (domain,))
 
     def update_user_fields(self, domain: str, provider=None, tags=None, note=None,
-                           manual_expires_at=None, auto_renew="__keep__", pinned=None) -> None:
+                           manual_expires_at="__keep__", auto_renew="__keep__",
+                           pinned=None) -> None:
+        """None = giu nguyen, tru manual_expires_at va auto_renew.
+
+        Hai truong do dung sentinel "__keep__" vi None la mot GIA TRI that voi
+        chung: "xoa ngay nhap tay" va "khong ro co tu dong gia han khong".
+        Dung None lam "giu nguyen" thi khong con cach nao xoa - hop nhap ngay
+        het han moi nguoi dung "de trong de xoa" ma khong xoa duoc gi.
+        """
         sets, args = [], []
         if provider is not None:
             sets.append("provider = ?"); args.append(provider)
@@ -267,7 +277,7 @@ class Store:
             sets.append("tags = ?"); args.append(_dumps(tags))
         if note is not None:
             sets.append("note = ?"); args.append(note)
-        if manual_expires_at is not None:
+        if manual_expires_at != "__keep__":
             sets.append("manual_expires_at = ?"); args.append(iso(parse_dt(manual_expires_at)))
         if auto_renew != "__keep__":
             sets.append("auto_renew = ?")
