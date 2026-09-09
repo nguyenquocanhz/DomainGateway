@@ -17,6 +17,8 @@ from __future__ import annotations
 
 import requests
 
+from .models import lam_sach
+
 API = "https://api.cloudflare.com/client/v4"
 USER_AGENT = "DomainGateway/1.0"
 
@@ -65,6 +67,21 @@ class CloudflareClient:
             data = resp.json()
         except ValueError:
             raise CloudflareError(f"Cloudflare trả về HTTP {resp.status_code}, không phải JSON") from None
+
+        # Cloudflare la nguon mang thu tu, sau RDAP/WHOIS/BKNS. `resp.json()`
+        # nhan escape surrogate y het chung, roi chuoi do di thang vao sqlite
+        # (cot cf_status) va jsonify (ensure_ascii=False) - do that: ca ba
+        # duong verify / sync / thong bao loi deu ra 500.
+        #
+        # Don ngay tai `_get` chu khong o tung ham goi: day la cua DUY NHAT moi
+        # JSON cua Cloudflare di qua, giong `Resolver._run()` ben registry. Them
+        # endpoint moi sau nay tu duoc don ma khong phai nho.
+        try:
+            data = lam_sach(data)
+        except ValueError:
+            # Long qua sau - Cloudflare khong tra ve thu nhu vay, nhung neu co
+            # thi day la du lieu hong chu khong phai loi cua may chu minh.
+            raise CloudflareError("Cloudflare trả về dữ liệu lồng quá sâu") from None
 
         if not data.get("success"):
             loi = "; ".join(
