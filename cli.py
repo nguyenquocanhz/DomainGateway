@@ -32,7 +32,7 @@ for _stream in (sys.stdout, sys.stderr):
         pass
 
 from gateway import config as cfgmod
-from gateway.models import STATUS_LABEL, iso, lam_sach, utcnow
+from gateway.models import STATUS_LABEL, iso, lam_sach, lam_sach_giu_khoa, utcnow
 from gateway.notifier import TelegramNotifier, bucket_of, build_message
 from gateway.resolver import normalize_domain
 from gateway.store import Store
@@ -69,25 +69,36 @@ def cmd_import(args, store: Store, cfg: dict) -> int:
         ]
     # Cung ly do nhu than JSON cua HTTP: json.load nhan escape \ud800, sqlite
     # thi khong. File nay do nguoi dung tu soan nen van la du lieu ben ngoai.
+    #
+    # PHAI dung ban _giu_khoa: don ca truong `domain` thi normalize_domain thay
+    # chuoi da sach, la chan cua no khong bao gio nay, va "a\x01b.com" van ghi
+    # de len ban ghi "ab.com" co that - dung lo ma commit truoc di va.
     try:
-        raw = lam_sach(raw)
+        raw = lam_sach_giu_khoa(raw)
     except ValueError as e:
         _print(f"File {args.file} khong dung dinh dang: {e}")
         return 1
     if isinstance(raw, dict):
         raw = raw.get("domains", [])
     count = 0
+    bo_qua = []
     for item in raw:
         if isinstance(item, str):
             item = {"domain": item}
+        if not isinstance(item, dict) or not isinstance(item.get("domain", ""), str):
+            bo_qua.append(repr(item)[:40])
+            continue
         domain = normalize_domain(item.get("domain", ""))
-        if not domain:
+        # "." not in domain: cung kiem nhu cmd_add. Thieu no thi mot ten miền
+        # rac tao ra khoa cut nhu "sur" trong kho.
+        if not domain or "." not in domain:
+            bo_qua.append(str(item.get("domain", ""))[:40])
             continue
         store.add(
             domain,
-            provider=item.get("provider", ""),
-            tags=item.get("tags") or [],
-            note=item.get("note", ""),
+            provider=item.get("provider") if isinstance(item.get("provider"), str) else "",
+            tags=[t for t in (item.get("tags") or []) if isinstance(t, str)],
+            note=item.get("note") if isinstance(item.get("note"), str) else "",
             manual_expires_at=item.get("expires_at"),
             auto_renew=item.get("auto_renew"),
             pinned=bool(item.get("pinned")),
@@ -147,13 +158,20 @@ def cmd_set(args, store: Store, cfg: dict) -> int:
 
 def cmd_rm(args, store: Store, cfg: dict) -> int:
     domain = normalize_domain(args.domain)
+    # Khong co thi noi thang, dung in "Da xoa " voi ten rong roi tra 0 - giong
+    # DELETE /api/domains da sua.
+    if not domain or not store.get(domain):
+        _print(f"Khong tim thay {args.domain}")
+        return 1
     store.delete(domain)
     _print(f"Da xoa {domain}")
     return 0
 
 
 def cmd_refresh(args, store: Store, cfg: dict) -> int:
-    names = [normalize_domain(d) for d in args.domains] if args.domains else store.names()
+    # Loc chuoi rong: normalize_domain tra "" voi ten mien co ky tu khong hop le
+    names = ([d for d in (normalize_domain(x) for x in args.domains) if d]
+             if args.domains else store.names())
     if not names:
         _print("Kho trong. Chay: python cli.py import data/domains.example.json")
         return 1
@@ -183,11 +201,21 @@ def cmd_refresh(args, store: Store, cfg: dict) -> int:
         _print(f"  [{done}/{total}] {mark}{rec.domain:28} {detail}")
 
     records = resolver.lookup_many(names, progress=progress)
+    da_luu, khong_luu = 0, []
     for rec in records:
-        store.save_lookup(rec)
-    store.set_meta("last_refresh", iso(utcnow()))
+        try:
+            store.save_lookup(rec)
+            da_luu += 1
+        except Exception as exc:                              # noqa: BLE001
+            # Bao ve tung ban ghi, giong vong refresh ben app.py.
+            khong_luu.append(f"{rec.domain} ({type(exc).__name__})")
+    if da_luu:
+        store.set_meta("last_refresh", iso(utcnow()))
     ok = sum(1 for r in records if r.expires_at)
     _print(f"Xong: {ok}/{len(records)} tra cuu thanh cong.")
+    if khong_luu:
+        _print("Khong luu duoc: " + ", ".join(khong_luu))
+        return 1
     return 0
 
 
@@ -306,8 +334,11 @@ def cmd_export(args, store: Store, cfg: dict) -> int:
         except ImportError:
             _print(thieu_thu_vien)
             hong.append(nhan)
-        except OSError as exc:
-            _print(f"Loi khi xuat {nhan}: {exc}")
+        except Exception as exc:                          # noqa: BLE001
+            # Bat rong co chu y: LayoutError cua reportlab va
+            # IllegalCharacterError cua openpyxl deu la ung vien that, va muc
+            # dich cua ham nay la mot dich hong khong duoc giet cac dich sau.
+            _print(f"Loi khi xuat {nhan}: {type(exc).__name__}: {exc}")
             hong.append(nhan)
 
     if args.json:

@@ -1616,10 +1616,17 @@
         startRefresh([domain], true);
       } else if (act === "delete") {
         if (confirm(`Xoá ${domain} khỏi kho quản lý?`)) {
-          await api(`/api/domains/${encodeURIComponent(domain)}`, { method: "DELETE" });
+          try {
+            await api(`/api/domains/${encodeURIComponent(domain)}`, { method: "DELETE" });
+            toast(`Đã xoá ${domain}.`, "ok");
+          } catch (e) {
+            // 404 giờ là kết quả có thật: tab mở lâu, hoặc đã bị xoá nơi khác.
+            // Không bắt thì listener async nuốt lỗi — không toast, không nạp
+            // lại, dòng ma ở lại và drawer không đóng.
+            toast(String(e.message || e), "err");
+          }
           closeDrawer();
           await load();
-          toast(`Đã xoá ${domain}.`, "ok");
         }
       }
     });
@@ -1713,9 +1720,13 @@
           "_blank", "noopener");
       } else if (m === "delete") {
         if (confirm(`Xoá ${domain} khỏi kho quản lý?`)) {
-          await api(`/api/domains/${encodeURIComponent(domain)}`, { method: "DELETE" });
+          try {
+            await api(`/api/domains/${encodeURIComponent(domain)}`, { method: "DELETE" });
+            toast(`Đã xoá ${domain}.`, "ok");
+          } catch (e) {
+            toast(String(e.message || e), "err");
+          }
           await load();
-          toast(`Đã xoá ${domain}.`, "ok");
         }
       }
       void r;

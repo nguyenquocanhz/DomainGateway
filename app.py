@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from gateway import config as cfgmod
 from gateway import exporters
-from gateway.models import iso, lam_sach, utcnow
+from gateway.models import iso, lam_sach, lam_sach_giu_khoa, utcnow
 
 # reportlab la phu thuoc TUY CHON (thieu no thi chi rieng xuat PDF bao loi),
 # nen khong import thang o dau file. LayoutError chi dung trong except nen
@@ -123,22 +123,12 @@ def _than_json() -> dict:
     if not isinstance(than, dict):
         return {}
     try:
-        # lam_sach truoc khi tra ve: mot surrogate lac hay ky tu dieu khien o
-        # bat ky truong nao cung lam sqlite/openpyxl nem loi o tang duoi.
-        sach = lam_sach(than)
+        # Don moi truong TRU khoa chinh - xem lam_sach_giu_khoa().
+        return lam_sach_giu_khoa(than)
     except ValueError:
         # Long qua sau. Tra dict rong -> handler tu bao thieu truong bat buoc,
         # dung nhu truoc khi co lam_sach (400 chu khong phai 500).
         return {}
-    # NGOAI LE: truong tro thanh KHOA CHINH phai toi normalize_domain NGUYEN
-    # VEN de no con tu choi duoc. Don am tham o day la bien "ab.com" thanh
-    # "ab.com" - khoa cua mot ten mien KHAC dang co that - roi POST ghi de len
-    # provider/note cua no ma tra ve 201. Don gia tri thi tot, don KHOA thi
-    # khong.
-    for khoa in ("domain", "domains"):
-        if khoa in than:
-            sach[khoa] = than[khoa]
-    return sach
 
 
 def _danh_ba_hop_le(sections: object) -> bool:
@@ -337,7 +327,9 @@ def create_app(cfg: dict = None, store: Store = None) -> Flask:
         # dong, roi refresh chay het quota BKNS va treo hang gio.
         MAX_MOI_LAN = 500
         # Cho phep dan nhieu ten mien cung luc, cach nhau bang xuong dong/phay/space
-        khoi = str(raw).replace(",", "\n").replace(" ", "\n").splitlines()
+        if not isinstance(raw, str):
+            return jsonify({"error": "Tên miền phải là chuỗi"}), 400
+        khoi = raw.replace(",", "\n").replace(" ", "\n").splitlines()
         if len(khoi) > MAX_MOI_LAN:
             return jsonify({
                 "error": f"Quá {MAX_MOI_LAN} dòng trong một lần thêm. "
@@ -346,8 +338,13 @@ def create_app(cfg: dict = None, store: Store = None) -> Flask:
         for chunk in khoi:
             domain = normalize_domain(chunk)
             if not domain or "." not in domain:
+                # lam_sach o day chu khong o _than_json: `domain` co y giu tho
+                # de normalize_domain con tu choi, nhung doi nguyen chuoi tho
+                # nguoc ve client thi jsonify (ensure_ascii=False) nghen ngay
+                # voi surrogate lac -> 500 SAU KHI mot phan danh sach da ghi
+                # vao kho. Nguoi dung thay that bai trong khi du lieu da vao.
                 if chunk.strip():
-                    skipped.append(chunk.strip())
+                    skipped.append(lam_sach(chunk).strip())
                 continue
             store.add(
                 domain,
@@ -485,9 +482,16 @@ def create_app(cfg: dict = None, store: Store = None) -> Flask:
                 return jsonify({"error": "Danh sách tên miền phải là chuỗi"}), 400
         else:
             return jsonify({"error": "`domains` phải là danh sách tên miền"}), 400
-        names = [normalize_domain(n) for n in names if n]
+        # Loc dau RA chu khong chi dau VAO: normalize_domain tra chuoi rong
+        # khi ten mien co ky tu khong hop le, va `if n` khong bat duoc no. De
+        # lot thi job khoi dong voi total=1, khong tra cuu gi, roi giao dien
+        # toast "Da cap nhat 0 ten mien" - dung loai man hinh noi doi.
+        xin_bao_nhieu = len(names)
+        names = [d for d in (normalize_domain(n) for n in names) if d]
         if not names:
-            return jsonify({"error": "Kho trống"}), 400
+            return jsonify({
+                "error": "Kho trống" if not xin_bao_nhieu else "Không có tên miền hợp lệ"
+            }), 400
 
         if not payload.get("force"):
             ttl = int(cfg.get("cache_ttl_hours", 12)) * 3600

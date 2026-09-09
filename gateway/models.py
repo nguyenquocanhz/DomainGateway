@@ -75,6 +75,54 @@ _TRUONG_CHUOI = ("domain", "tld", "registrar", "registrant", "source", "error")
 _TRUONG_DANH_SACH = ("nameservers", "epp_status")
 
 
+# Truong tro thanh KHOA CHINH. Phai toi normalize_domain nguyen ven de no
+# con tu choi duoc - don am tham la bien mot chuoi rac thanh khoa cua mot ten
+# mien KHAC dang co that.
+KHOA_CHINH = ("domain", "domains")
+
+
+def lam_sach_giu_khoa(gia_tri, _sau: int = 0):
+    """Nhu lam_sach() nhung giu nguyen moi truong ten trong KHOA_CHINH.
+
+    Dung o CA HAI cua nhan du lieu ngoai: than JSON cua HTTP va file cua
+    `cli.py import`. Truoc day chi HTTP co ngoai le nay, nen lo ghi de van con
+    nguyen qua duong import - dung cai lo ma commit truoc lay lam tieu de.
+    """
+    if _sau > SAU_TOI_DA:
+        raise ValueError("Dữ liệu JSON lồng quá sâu")
+    if isinstance(gia_tri, dict):
+        return {lam_sach(k, _sau + 1): (v if k in KHOA_CHINH
+                                        else lam_sach_giu_khoa(v, _sau + 1))
+                for k, v in gia_tri.items()}
+    if isinstance(gia_tri, list):
+        return [lam_sach_giu_khoa(x, _sau + 1) for x in gia_tri]
+    return lam_sach(gia_tri, _sau)
+
+
+# Truong tro thanh KHOA CHINH. Phai toi normalize_domain nguyen ven de no
+# con tu choi duoc - don am tham la bien mot chuoi rac thanh khoa cua mot ten
+# mien KHAC dang co that.
+KHOA_CHINH = ("domain", "domains")
+
+
+def lam_sach_giu_khoa(gia_tri, _sau: int = 0):
+    """Nhu lam_sach() nhung giu nguyen moi truong ten trong KHOA_CHINH.
+
+    Dung o CA HAI cua nhan du lieu ngoai: than JSON cua HTTP va file cua
+    `cli.py import`. Truoc day chi HTTP co ngoai le nay, nen lo ghi de van con
+    nguyen qua duong import - dung cai lo ma commit truoc lay lam tieu de.
+    """
+    if _sau > SAU_TOI_DA:
+        raise ValueError("Dữ liệu JSON lồng quá sâu")
+    if isinstance(gia_tri, dict):
+        return {lam_sach(k, _sau + 1): (v if k in KHOA_CHINH
+                                        else lam_sach_giu_khoa(v, _sau + 1))
+                for k, v in gia_tri.items()}
+    if isinstance(gia_tri, list):
+        return [lam_sach_giu_khoa(x, _sau + 1) for x in gia_tri]
+    return lam_sach(gia_tri, _sau)
+
+
 def lam_sach_ban_ghi(rec):
     """Don mot DomainRecord vua dung tu phan hoi cua may chu ben thu ba.
 
