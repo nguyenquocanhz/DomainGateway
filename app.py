@@ -399,7 +399,22 @@ def create_app(cfg: dict = None, store: Store = None) -> Flask:
 
         try:
             for rec in resolver.lookup_many(names, progress=progress):
-                store.save_lookup(rec)
+                try:
+                    store.save_lookup(rec)
+                except Exception as exc:                     # noqa: BLE001
+                    # Bao ve TUNG ban ghi. Truoc day mot loi o day thoat ra
+                    # khoi vong for, nen moi ten mien phia sau khong bao gio
+                    # duoc ghi - trong khi `finally` van dat finished_at va
+                    # progress() da dem chung vao job.ok. Man hinh bao
+                    # "xong 9/9, loi 0" trong khi kho chi co 3 ban ghi moi.
+                    # Khong nen: lang le mat du lieu ma nhin nhu thanh cong.
+                    with job.lock:
+                        if rec.expires_at:
+                            job.ok = max(0, job.ok - 1)
+                        job.failed.append({
+                            "domain": rec.domain,
+                            "error": "không lưu được: " + type(exc).__name__,
+                        })
             store.set_meta("last_refresh", iso(utcnow()))
         finally:
             with job.lock:

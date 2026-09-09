@@ -22,7 +22,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
 
-from .models import DomainRecord, parse_dt, utcnow
+from .models import DomainRecord, lam_sach, lam_sach_ban_ghi, parse_dt, utcnow
 
 USER_AGENT = "DomainGateway/1.0"
 RDAP_BOOTSTRAP = "https://rdap.org/domain/{domain}"
@@ -83,8 +83,15 @@ def is_vn_domain(domain: str) -> bool:
 
 
 def normalize_domain(raw: str) -> str:
-    """Chap nhan URL day du, dau cham cuoi, IDN tieng Viet -> tra ve punycode."""
-    d = (raw or "").strip().lower()
+    """Chap nhan URL day du, dau cham cuoi, IDN tieng Viet -> tra ve punycode.
+
+    Day la cua chung cua MOI chuoi ten mien: query string cua /api/lookup, than
+    JSON, tham so dong lenh, file .txt cua `cli.py import`. Nen don o day thi
+    khong con duong nao dua surrogate lac hay ky tu dieu khien vao khoa chinh
+    cua bang - `.encode("idna")` ben duoi nem UnicodeError voi chung roi bi bat
+    im, nen chung di lot nguyen ven.
+    """
+    d = lam_sach((raw or "")).strip().lower()
     d = re.sub(r"^[a-z]+://", "", d)
     d = d.split("/")[0].split("?")[0].split("#")[0]
     d = d.split("@")[-1].split(":")[0]
@@ -426,12 +433,19 @@ class Resolver:
         return ["rdap", "whois43"]
 
     def _run(self, source: str, domain: str) -> DomainRecord:
+        """Cua duy nhat ma du lieu tu ca ba nguon mang di qua.
+
+        Don o day chu khong o tung ham fetch_*: mot nguon moi them sau nay se
+        tu duoc don ma khong phai nho.
+        """
         self._limits[source].acquire()
         if source == "bkns":
-            return fetch_bkns(domain, self.bkns_api_key, timeout=self.timeout)
-        if source == "rdap":
-            return fetch_rdap(domain, timeout=self.timeout)
-        return fetch_whois43(domain, timeout=self.timeout)
+            rec = fetch_bkns(domain, self.bkns_api_key, timeout=self.timeout)
+        elif source == "rdap":
+            rec = fetch_rdap(domain, timeout=self.timeout)
+        else:
+            rec = fetch_whois43(domain, timeout=self.timeout)
+        return lam_sach_ban_ghi(rec)
 
     def lookup(self, domain: str) -> DomainRecord:
         """Tra ve ban ghi dau tien co expires_at. Neu tat ca that bai thi tra ve

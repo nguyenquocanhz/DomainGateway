@@ -69,6 +69,33 @@ def lam_sach(gia_tri, _sau: int = 0):
     return gia_tri
 
 
+# Cac truong do REGISTRY dien. Khong dung cho provider/tags/note - do la
+# truong nguoi dung, di duong khac (_than_json / cli import).
+_TRUONG_CHUOI = ("domain", "tld", "registrar", "registrant", "source", "error")
+_TRUONG_DANH_SACH = ("nameservers", "epp_status")
+
+
+def lam_sach_ban_ghi(rec):
+    """Don mot DomainRecord vua dung tu phan hoi cua may chu ben thu ba.
+
+    RDAP/WHOIS/BKNS deu la du lieu ngoai y het than JSON cua HTTP: `resp.json()`
+    nhan escape \\ud800 y het, roi chuoi do di thang vao sqlite va jsonify.
+    /api/lookup tra ban ghi ra ma khong luu, nen don o tang store thoi la khong
+    du - phai don ngay khi ban ghi vua duoc dung.
+
+    Sua tai cho: ban ghi vua tao xong, chua ai giu tham chieu khac.
+    """
+    for ten in _TRUONG_CHUOI:
+        gt = getattr(rec, ten, None)
+        if isinstance(gt, str):
+            setattr(rec, ten, lam_sach(gt))
+    for ten in _TRUONG_DANH_SACH:
+        gt = getattr(rec, ten, None)
+        if isinstance(gt, list):
+            setattr(rec, ten, [lam_sach(x) if isinstance(x, str) else x for x in gt])
+    return rec
+
+
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 

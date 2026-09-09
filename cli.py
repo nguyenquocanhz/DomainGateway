@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import io
 import json
 import os
 import sys
@@ -98,11 +99,13 @@ def cmd_import(args, store: Store, cfg: dict) -> int:
 
 def cmd_add(args, store: Store, cfg: dict) -> int:
     domain = normalize_domain(args.domain)
+    # argv cung la du lieu ngoai: dan mot doan copy tu terminal vao --note la
+    # co the mang theo ky tu dieu khien. normalize_domain da don `domain`.
     store.add(
         domain,
-        provider=args.provider or "",
-        tags=[t.strip() for t in (args.tags or "").split(",") if t.strip()],
-        note=args.note or "",
+        provider=lam_sach(args.provider or ""),
+        tags=[lam_sach(t.strip()) for t in (args.tags or "").split(",") if t.strip()],
+        note=lam_sach(args.note or ""),
         manual_expires_at=args.expires,
         auto_renew=None if args.auto_renew is None else args.auto_renew,
         pinned=bool(args.pin),
@@ -124,9 +127,10 @@ def cmd_set(args, store: Store, cfg: dict) -> int:
         return 1
     store.update_user_fields(
         domain,
-        provider=args.provider,
-        tags=[t.strip() for t in args.tags.split(",") if t.strip()] if args.tags is not None else None,
-        note=args.note,
+        provider=lam_sach(args.provider) if args.provider is not None else None,
+        tags=([lam_sach(t.strip()) for t in args.tags.split(",") if t.strip()]
+              if args.tags is not None else None),
+        note=lam_sach(args.note) if args.note is not None else None,
         # --expires "" xoa ngay nhap tay; khong truyen --expires thi giu nguyen
         manual_expires_at="__keep__" if args.expires is None else args.expires,
         auto_renew=args.auto_renew if args.auto_renew is not None else "__keep__",
@@ -233,38 +237,64 @@ def cmd_list(args, store: Store, cfg: dict) -> int:
     return 0
 
 
+def _ghi_an_toan(duong_dan: str, noi_dung, nhi_phan: bool = False,
+                 ma_hoa: str = "utf-8") -> None:
+    """Dung noi dung XONG roi moi cham vao file dich.
+
+    `open(dich, "w")` cat cut file ve 0 byte NGAY LUC MO, truoc khi ham dung
+    noi dung kip chay. Ham do nem loi giua chung la ban xuat cu mat sach, doi
+    lay mot file rong - do that: 1.900 byte -> 0 byte, khong canh bao gi.
+
+    Ghi ra file tam canh dich roi os.replace: dich chi bi thay khi da co du
+    noi dung, va phep thay la nguyen tu tren cung mot o dia.
+    """
+    tam = duong_dan + ".tmp"
+    try:
+        if nhi_phan:
+            with open(tam, "wb") as fh:
+                fh.write(noi_dung)
+        else:
+            with open(tam, "w", encoding=ma_hoa, newline="") as fh:
+                fh.write(noi_dung)
+        os.replace(tam, duong_dan)
+    except BaseException:
+        try:
+            os.remove(tam)
+        except OSError:
+            pass
+        raise
+
+
 def cmd_export(args, store: Store, cfg: dict) -> int:
     warn, crit = int(cfg["warn_days"]), int(cfg["critical_days"])
     rows = [r.to_dict(warn, crit) for r in store.all()]
     if args.json:
-        with open(args.json, "w", encoding="utf-8") as fh:
-            json.dump(rows, fh, ensure_ascii=False, indent=2)
+        _ghi_an_toan(args.json, json.dumps(rows, ensure_ascii=False, indent=2))
         _print(f"Da xuat JSON: {args.json}")
     if args.csv:
         cols = ["domain", "status", "days_left", "expires_at", "provider", "registrar",
                 "created_at", "nameservers", "auto_renew", "tags", "source", "note", "error"]
-        with open(args.csv, "w", encoding="utf-8-sig", newline="") as fh:
-            writer = csv.DictWriter(fh, fieldnames=cols, extrasaction="ignore")
-            writer.writeheader()
-            for row in rows:
-                row = dict(row)
-                row["nameservers"] = ", ".join(row.get("nameservers") or [])
-                row["tags"] = ", ".join(row.get("tags") or [])
-                writer.writerow(row)
+        dem = io.StringIO()
+        writer = csv.DictWriter(dem, fieldnames=cols, extrasaction="ignore")
+        writer.writeheader()
+        for row in rows:
+            row = dict(row)
+            row["nameservers"] = ", ".join(row.get("nameservers") or [])
+            row["tags"] = ", ".join(row.get("tags") or [])
+            writer.writerow(row)
+        _ghi_an_toan(args.csv, dem.getvalue(), ma_hoa="utf-8-sig")
         _print(f"Da xuat CSV: {args.csv}")
     records = store.all()
 
     if args.md:
         from gateway import exporters
-        with open(args.md, "w", encoding="utf-8") as fh:
-            fh.write(exporters.to_markdown(records, warn, crit))
+        _ghi_an_toan(args.md, exporters.to_markdown(records, warn, crit))
         _print(f"Da xuat Markdown: {args.md}")
 
     if args.xlsx:
         try:
             from gateway import exporters
-            with open(args.xlsx, "wb") as fh:
-                fh.write(exporters.to_xlsx(records, warn, crit))
+            _ghi_an_toan(args.xlsx, exporters.to_xlsx(records, warn, crit), nhi_phan=True)
             _print(f"Da xuat Excel: {args.xlsx}")
         except ImportError:
             _print("Thieu thu vien openpyxl. Chay: pip install openpyxl")
@@ -273,8 +303,7 @@ def cmd_export(args, store: Store, cfg: dict) -> int:
     if args.pdf:
         try:
             from gateway import exporters
-            with open(args.pdf, "wb") as fh:
-                fh.write(exporters.to_pdf(records, warn, crit))
+            _ghi_an_toan(args.pdf, exporters.to_pdf(records, warn, crit), nhi_phan=True)
             _print(f"Da xuat PDF: {args.pdf}")
         except ImportError:
             _print("Thieu thu vien reportlab. Chay: pip install reportlab")
