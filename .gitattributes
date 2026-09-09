@@ -1,0 +1,14 @@
+# Chuẩn hoá xuống dòng: trong repo luôn là LF, bất kể máy nào commit.
+#
+# Không có file này thì công cụ trên Windows lặng lẽ đổi cả file sang CRLF, và
+# git báo "toàn bộ file đã thay" cho một sửa 5 dòng — git blame với git log -p
+# mất tác dụng, review diff cũng vô nghĩa. Đã dính đúng một lần với
+# gateway/exporters.py (commit 05eceac: 5 chỗ sửa, 1084 dòng đổi).
+#
+# text=auto: git tự nhận file nào là văn bản. eol=lf: cả trong repo lẫn trong
+# thư mục làm việc đều LF — Python, JS, CSS, Markdown trên Windows đều đọc
+# được LF, nên không mất gì.
+* text=auto eol=lf
+
+# Ảnh là nhị phân, đừng đụng vào byte nào
+*.png binary
