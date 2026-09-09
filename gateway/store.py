@@ -211,10 +211,11 @@ class Store:
         with conn:
             exists = conn.execute("SELECT 1 FROM domains WHERE domain = ?", (domain,)).fetchone()
             if exists:
-                # update_user_fields dung quy uoc "None = giu nguyen" (rieng
-                # auto_renew dung sentinel "__keep__" vi None la mot gia tri
-                # that: "khong ro"). add() phai DICH cac mac dinh cua minh
-                # sang quy uoc do.
+                # update_user_fields dung quy uoc "None = giu nguyen", tru
+                # auto_renew va manual_expires_at: hai truong do dung sentinel
+                # "__keep__" vi None la mot GIA TRI that voi chung ("khong ro"
+                # va "xoa ngay nhap tay"). add() phai DICH cac mac dinh cua
+                # minh sang quy uoc do.
                 #
                 # Truoc day chi dich provider va note; tags/pinned/auto_renew
                 # truyen thang [] / False / None nen deu la lenh GHI DE. Them
@@ -236,8 +237,9 @@ class Store:
                     provider=provider or None,
                     tags=tags or None,
                     note=note or None,
-                    manual_expires_at=("__keep__" if manual_expires_at is None
-                                       else manual_expires_at),
+                    # `not x` chu khong phai `x is None`: cli.py import voi
+                    # {"expires_at": ""} phai la "giu nguyen", khong phai "xoa".
+                    manual_expires_at=manual_expires_at or "__keep__",
                     auto_renew="__keep__" if auto_renew is None else auto_renew,
                     pinned=pinned or None,
                 )

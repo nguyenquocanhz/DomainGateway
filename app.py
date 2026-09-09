@@ -82,7 +82,20 @@ def _giau_phien_ban_werkzeug() -> None:
 _giau_phien_ban_werkzeug()
 
 
-def _danh_ba_hop_le(sections) -> bool:
+def _than_json() -> dict:
+    """Than request duoi dang dict, luon luon.
+
+    `request.get_json(silent=True) or {}` chi do duoc `null` va than rong.
+    Than la mang, so hay chuoi JSON - `[1,2]`, `5`, `"abc"` - deu la JSON HOP LE
+    nen Flask tra ve list/int/str, roi `.get()` tren do la AttributeError -> 500
+    cho mot loi cua nguoi gui. Ep ve dict rong: cac handler tu tra 400 vi thieu
+    truong bat buoc.
+    """
+    than = request.get_json(silent=True)
+    return than if isinstance(than, dict) else {}
+
+
+def _danh_ba_hop_le(sections: object) -> bool:
     """Kiem hinh dang payload danh ba truoc khi dan PDF.
 
     registry_pdf() goi sec.get(...), item.get(...) va " ".join(tlds) tren noi
@@ -270,7 +283,7 @@ def create_app(cfg: dict = None, store: Store = None) -> Flask:
     # ---- ghi du lieu ------------------------------------------------------
     @app.post("/api/domains")
     def api_add():
-        payload = request.get_json(silent=True) or {}
+        payload = _than_json()
         raw = payload.get("domain", "")
         added, skipped = [], []
         # Chan so luong moi lan them. Khong phai lo bi tan cong - CSRF da chan
@@ -311,7 +324,7 @@ def create_app(cfg: dict = None, store: Store = None) -> Flask:
         domain = normalize_domain(domain)
         if not store.get(domain):
             return jsonify({"error": "Không tìm thấy tên miền"}), 404
-        payload = request.get_json(silent=True) or {}
+        payload = _than_json()
         store.update_user_fields(
             domain,
             provider=payload.get("provider"),
@@ -371,7 +384,7 @@ def create_app(cfg: dict = None, store: Store = None) -> Flask:
 
     @app.post("/api/refresh")
     def api_refresh():
-        payload = request.get_json(silent=True) or {}
+        payload = _than_json()
         names = payload.get("domains") or store.names()
         names = [normalize_domain(n) for n in names if n]
         if not names:
@@ -429,7 +442,7 @@ def create_app(cfg: dict = None, store: Store = None) -> Flask:
 
     @app.post("/api/settings")
     def api_settings_post():
-        payload = request.get_json(silent=True) or {}
+        payload = _than_json()
         changes, notify_changes = {}, {}
 
         for key in ("warn_days", "critical_days", "cache_ttl_hours"):
@@ -554,7 +567,7 @@ def create_app(cfg: dict = None, store: Store = None) -> Flask:
 
     @app.post("/api/notify/send")
     def api_notify_send():
-        payload = request.get_json(silent=True) or {}
+        payload = _than_json()
         force = bool(payload.get("force"))
         warn, crit = thresholds()
         bot = notifier()
@@ -631,7 +644,7 @@ def create_app(cfg: dict = None, store: Store = None) -> Flask:
 
         Bo loc nam o JavaScript; neu server loc lai thi phai viet lan thu hai
         bang Python va hai ban chac chan se lech nhau."""
-        payload = request.get_json(silent=True) or {}
+        payload = _than_json()
         if not _danh_ba_hop_le(payload.get("sections")):
             return jsonify({"error": "Thiếu danh sách khu vực, hoặc sai định dạng"}), 400
         try:

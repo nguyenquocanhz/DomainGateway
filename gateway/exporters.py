@@ -428,6 +428,12 @@ def registry_pdf(payload: dict) -> bytes:
     def par(text, style):
         return Paragraph(escape(str(text if text is not None else "")), style)
 
+    # par() da tu str() moi thu, nhung vai cho ben duoi noi chuoi TRUOC khi
+    # goi par() - va payload den tu trinh duyet nen mot truong sai kieu la
+    # TypeError, tra 500 cho mot loi cua nguoi gui. Nen moi phep noi o day
+    # deu str() tuong minh. Va tai day chu khong o tang API: them mot truong
+    # moi vao PDF thi khong phai nho di sua bo kiem ben app.py.
+
     buf = io.BytesIO()
     doc = SimpleDocTemplate(
         buf, pagesize=A4,
@@ -475,14 +481,14 @@ def registry_pdf(payload: dict) -> bytes:
         if sec.get("whois"):
             lines.append(f"WHOIS:43: {sec['whois']}")
         if sec.get("tlds"):
-            lines.append("Đuôi tên miền: " + " ".join(sec["tlds"]))
+            lines.append("Đuôi tên miền: " + " ".join(str(x) for x in sec["tlds"]))
         if lines:
             block.append(par(" · ".join(lines), meta))
         if sec.get("yeu_cau"):
             block.append(Spacer(1, 1.5 * mm))
-            block.append(par("Điều kiện đăng ký: " + sec["yeu_cau"], note))
+            block.append(par("Điều kiện đăng ký: " + str(sec["yeu_cau"]), note))
         if sec.get("canh_bao"):
-            block.append(par("Lưu ý: " + sec["canh_bao"], note))
+            block.append(par("Lưu ý: " + str(sec["canh_bao"]), note))
         block.append(Spacer(1, 3 * mm))
         story.append(KeepTogether(block))
 
@@ -494,7 +500,7 @@ def registry_pdf(payload: dict) -> bytes:
             rows.append([
                 Paragraph(f"<b>{name}</b>" + (f"<br/><font size=7 color='#6B7280'>{url}</font>"
                                               if url else ""), cell),
-                par(" · ".join(x for x in (item.get("quoc_gia"), item.get("loai")) if x), cell),
+                par(" · ".join(str(x) for x in (item.get("quoc_gia"), item.get("loai")) if x), cell),
                 par("Có" if item.get("trustee") else "", cell),
                 par(item.get("api") or "", cell_sm),
                 par(item.get("ghi_chu") or "", cell_sm),
