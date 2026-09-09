@@ -1,0 +1,11 @@
+[
+  { "domain": "shop-vidu.store",    "provider": "Namecheap",  "tags": ["shop", "prod"] },
+  { "domain": "congty-vidu.io.vn",  "provider": "iNET",       "tags": ["vn", "prod"] },
+  { "domain": "cuahang-vidu.com",   "provider": "Spaceship",  "tags": ["shop"] },
+  { "domain": "api-vidu.dev",       "provider": "Cloudflare", "tags": ["api"] },
+  { "domain": "blog-vidu.net",      "provider": "Namecheap",  "tags": ["blog"] },
+  { "domain": "landing-vidu.site",  "provider": "Namecheap",  "tags": ["landing"] },
+  { "domain": "canhan-vidu.id.vn",  "provider": "GMO RUNSYSTEM", "tags": ["vn", "canhan"] },
+  { "domain": "tenmien-vidu.xyz",   "provider": "Porkbun",    "tags": ["dev"] },
+  { "domain": "duan-vidu.online",   "provider": "Dynadot",    "tags": ["cu"] }
+]

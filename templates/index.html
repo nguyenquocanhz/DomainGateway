@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="vi" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Domain Gateway</title>
+<script nonce="{{ csp_nonce }}">
+  /* Chay truoc khi trang duoc ve de khong nhay mau (FOUC).
+     Luon ghi ra mot gia tri cu the dark|light, ke ca khi nguoi dung chon
+     "theo he thong" -> CSS chi can mot bang mau sang, khong phai khai bao trung. */
+  (function () {
+    try {
+      var pref = localStorage.getItem("dg.theme") || "dark";
+      var dark = pref === "dark" ||
+        (pref === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+      document.documentElement.dataset.theme = dark ? "dark" : "light";
+    } catch (e) {
+      document.documentElement.dataset.theme = "dark";
+    }
+  })();
+</script>
+<link rel="stylesheet" href="{{ asset('app.css') }}">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌐</text></svg>">
+</head>
+<body data-warn="{{ warn_days }}" data-critical="{{ critical_days }}">
+
+<div class="nav-scrim" id="navScrim" hidden></div>
+
+<div class="layout">
+
+  <!-- ============================ SIDEBAR ============================ -->
+  <aside class="sidebar">
+    <div class="sb-top">
+      <div class="brand">
+        <!-- Quả địa cầu = tên miền, cung đậm = quãng thời gian còn lại trước khi hết hạn -->
+        <svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true">
+          <g class="bm-globe">
+            <circle cx="12" cy="12" r="8.5"/>
+            <path d="M3.5 12h17"/>
+            <path d="M12 3.5a12.5 12.5 0 0 1 0 17 12.5 12.5 0 0 1 0-17"/>
+          </g>
+          <path class="bm-arc" d="M12 3.5a8.5 8.5 0 0 1 8.5 8.5"/>
+        </svg>
+        <button class="account" type="button">
+          <span class="account-name">Domain Gateway</span>
+          <svg class="chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6.5 8 10l4-3.5"/></svg>
+        </button>
+        <!-- Khung co thanh ben trai dam: an du "thu/mo thanh ben", mui ten doi chieu theo trang thai -->
+        <button class="collapse-btn" id="btnCollapse" type="button" title="Thu gọn thanh bên (Ctrl+B)">
+          <svg class="ico" viewBox="0 0 16 16" aria-hidden="true">
+            <rect x="1.8" y="2.8" width="12.4" height="10.4" rx="1.4"/>
+            <path class="cb-spine" d="M6.2 2.8v10.4"/>
+            <path class="cb-arrow" d="M10.6 6.4 9 8l1.6 1.6"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="quick-search">
+        <svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/></svg>
+        <input id="quickSearch" type="text" placeholder="Tìm nhanh..." autocomplete="off">
+        <kbd>Ctrl K</kbd>
+      </div>
+    </div>
+
+    <nav class="sb-nav">
+      <div class="nav-group">
+        <div class="nav-group-head"><span>Tên miền</span></div>
+
+        <a class="nav-item active" data-view="overview" href="#overview" title="Danh sách">
+          <!-- Bảng có hàng tiêu đề: đúng nghĩa "danh sách tên miền", không trùng hamburger -->
+          <svg class="ico" viewBox="0 0 16 16" aria-hidden="true">
+            <rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M2 6.4h12M6.4 6.4V13"/>
+          </svg>
+          <span class="nav-label">Danh sách</span>
+        </a>
+        <a class="nav-item" data-view="expiring" href="#expiring" title="Sắp hết hạn">
+          <svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.4 1.6"/></svg>
+          <span class="nav-label">Sắp hết hạn</span>
+          <span class="nav-badge" id="navBadgeExpiring" data-zero="1">0</span>
+        </a>
+        <a class="nav-item" data-view="providers" href="#providers" title="Theo nhà cung cấp">
+          <svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="m8 2 6 3-6 3-6-3 6-3M2 8l6 3 6-3M2 11.5l6 3 6-3"/></svg>
+          <span class="nav-label">Theo nhà cung cấp</span>
+        </a>
+      </div>
+
+      <div class="nav-group">
+        <div class="nav-group-head"><span>Công cụ</span></div>
+
+        <a class="nav-item" data-view="lookup" href="#lookup" title="Tra cứu tên miền">
+          <svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/></svg>
+          <span class="nav-label">Tra cứu tên miền</span>
+        </a>
+        <a class="nav-item" data-view="registry" href="#registry" title="Danh bạ nhà đăng ký">
+          <!-- So co gay dong vong: danh ba tra cuu, phan biet voi trang tai lieu thuong -->
+          <svg class="ico" viewBox="0 0 16 16" aria-hidden="true">
+            <rect x="4" y="2.5" width="8.5" height="11" rx="1.2"/>
+            <path d="M4 5.2H2.4M4 8H2.4M4 10.8H2.4"/><path d="M6.4 6h3.7M6.4 8.6h2.2"/>
+          </svg>
+          <span class="nav-label">Danh bạ nhà đăng ký</span>
+        </a>
+        <a class="nav-item" data-view="settings" href="#settings" title="Cài đặt & cảnh báo">
+          <!-- Chuong: viec chinh cua trang nay la canh bao het han -->
+          <svg class="ico" viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M12.1 6.4a4.1 4.1 0 1 0-8.2 0c0 3.9-1.4 4.9-1.4 4.9h11s-1.4-1-1.4-4.9Z"/>
+            <path d="M9.3 13.4a1.5 1.5 0 0 1-2.6 0"/>
+          </svg>
+          <span class="nav-label">Cài đặt &amp; cảnh báo</span>
+          <span class="nav-dot" id="navDotNotify" hidden></span>
+        </a>
+      </div>
+    </nav>
+
+    <div class="sb-foot">
+      <div class="sb-foot-row" id="healthRow" title="Chưa tra cứu">
+        <span class="dot" id="healthDot"></span>
+        <span class="nav-label" id="lastRefresh">Chưa tra cứu</span>
+      </div>
+      <button class="theme-btn" id="btnTheme" type="button" aria-label="Đổi giao diện sáng/tối">
+        <span class="theme-ico" id="themeIco" aria-hidden="true"></span>
+        <span class="nav-label" id="themeLabel">Giao diện tối</span>
+      </button>
+    </div>
+  </aside>
+
+  <!-- ============================== MAIN ============================== -->
+  <main class="main">
+
+    <header class="topbar">
+      <div class="topbar-title">
+        <button class="icon-btn nav-toggle" id="btnNavToggle" type="button" aria-label="Mở menu">
+          <svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4h11M2.5 8h11M2.5 12h11"/></svg>
+        </button>
+        <!-- Icon đổi theo trang đang mở, do app.js gắn -->
+        <span class="page-icon" id="pageIcon" aria-hidden="true"></span>
+        <h1 id="pageTitle">Tên miền</h1>
+      </div>
+      <div class="topbar-actions">
+        <div class="export-wrap" id="exportWrap">
+          <button class="btn ghost" id="btnExport" type="button" title="Xuất dữ liệu"
+                  aria-haspopup="menu" aria-expanded="false">
+            <svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v8M5 7l3 3 3-3M2.5 13h11"/></svg>
+            <span class="btn-label">Xuất</span>
+          </button>
+        </div>
+        <button class="btn ghost" id="btnRefresh" type="button" title="Tra cứu lại">
+          <svg class="ico spin-target" viewBox="0 0 16 16" aria-hidden="true"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2v3.5H10"/></svg>
+          <span class="btn-label" id="refreshLabel">Tra cứu lại</span>
+        </button>
+        <button class="btn primary" id="btnAdd" type="button" title="Thêm tên miền">
+          <svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg>
+          <span class="btn-label">Thêm tên miền</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="progress-bar" id="progressBar" hidden><div class="progress-fill" id="progressFill"></div></div>
+
+    <!-- ---------- VIEW: overview / expiring / providers ---------- -->
+    <section class="view" id="view-table">
+      <div class="stat-row" id="statRow"></div>
+
+      <div class="search-hero">
+        <svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/></svg>
+        <input id="tableSearch" type="search" placeholder="Tìm theo tên miền, nhà cung cấp, registrar, tag..." autocomplete="off">
+        <div class="filter-chips" id="filterChips">
+          <button class="chip active" data-filter="all" type="button">Tất cả</button>
+          <button class="chip" data-filter="critical" type="button">Nguy cấp</button>
+          <button class="chip" data-filter="expiring" type="button">Sắp hết hạn</button>
+          <button class="chip" data-filter="unknown" type="button">Chưa rõ</button>
+        </div>
+
+        <div class="view-toggle" id="viewToggle" role="group" aria-label="Kiểu hiển thị">
+          <button class="vt-btn active" data-layout="table" type="button" title="Dạng bảng" aria-label="Dạng bảng">
+            <svg class="ico" viewBox="0 0 16 16" aria-hidden="true">
+              <rect x="2" y="3.5" width="12" height="9" rx="1.2"/><path d="M2 6.6h12M2 9.5h12"/>
+            </svg>
+          </button>
+          <button class="vt-btn" data-layout="grid" type="button" title="Dạng lưới" aria-label="Dạng lưới">
+            <svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><rect x="2.2" y="2.2" width="5" height="5" rx="1.2"/><rect x="8.8" y="2.2" width="5" height="5" rx="1.2"/><rect x="2.2" y="8.8" width="5" height="5" rx="1.2"/><rect x="8.8" y="8.8" width="5" height="5" rx="1.2"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table class="grid" id="domainTable">
+          <thead>
+            <tr>
+              <th class="sortable" data-sort="domain">Tên miền <span class="sort-ico"></span></th>
+              <th class="sortable" data-sort="status">Trạng thái <span class="sort-ico"></span></th>
+              <!-- Đặt ngay cạnh "Trạng thái" có chủ ý: một dòng đọc ra
+                   "Đang hoạt động | Website tắt" chính là thứ đáng thấy nhất.
+                   Cột tự ẩn khi chưa đồng bộ Cloudflare lần nào. -->
+              <th class="sortable col-site" data-sort="cf_ket_luan">Site <span class="sort-ico"></span></th>
+              <th class="sortable" data-sort="days_left">Còn lại <span class="sort-ico"></span></th>
+              <th class="sortable" data-sort="expires_at">Ngày hết hạn <span class="sort-ico"></span></th>
+              <th class="sortable" data-sort="provider">Nhà cung cấp <span class="sort-ico"></span></th>
+              <th>Nameserver</th>
+              <th>Tag</th>
+              <th class="col-menu"></th>
+            </tr>
+          </thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
+
+      <div class="card-grid" id="cardGrid" hidden></div>
+
+      <div class="table-foot">
+        <div class="tf-left">
+          <span id="rowCount">Đang tải...</span>
+          <span class="muted" id="groupHint"></span>
+        </div>
+
+        <div class="pager">
+          <label class="page-size">
+            <span>Mỗi trang</span>
+            <select id="pageSize">
+              <option value="10">10</option>
+              <option value="25">25</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+              <option value="0">Tất cả</option>
+            </select>
+          </label>
+          <nav class="pager-nav" id="pagerNav" aria-label="Phân trang"></nav>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- VIEW: lookup ---------- -->
+    <section class="view" id="view-lookup" hidden>
+      <div class="panel">
+        <h2>Tra cứu nhanh</h2>
+        <p class="muted">Kiểm tra bất kỳ tên miền nào qua RDAP / WHOIS / API Việt Nam mà không cần thêm vào kho.</p>
+        <div class="lookup-row">
+          <input id="lookupInput" type="text" placeholder="vidu.com hoặc tenmien.io.vn" autocomplete="off">
+          <button class="btn primary" id="btnLookup" type="button">Tra cứu</button>
+        </div>
+        <div id="lookupResult" class="lookup-result"></div>
+      </div>
+    </section>
+
+    <!-- ---------- VIEW: registry directory ---------- -->
+    <section class="view" id="view-registry" hidden>
+      <div class="search-hero">
+        <svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/></svg>
+        <input id="registrySearch" type="search" autocomplete="off"
+               placeholder="Tìm nhà đăng ký, quốc gia, đuôi tên miền, có API hay không...">
+        <!-- Chip khu vực do app.js dựng từ chính dữ liệu danh bạ, kèm số kết quả -->
+        <div class="filter-chips" id="regionChips"></div>
+        <!-- Gói chung để khi xuống dòng thì số đếm và nút đi cùng nhau, vẫn dạt phải -->
+        <div class="hero-right">
+          <span class="muted reg-count" id="registryCount"></span>
+          <!-- Mở/thu gọn mọi đoạn điều kiện đang hiện; nhãn và icon do app.js đặt -->
+          <button class="btn sm ghost fold-all" id="btnFoldAll" type="button" hidden></button>
+        </div>
+      </div>
+      <div id="registryContent" class="registry-grid"></div>
+    </section>
+
+    <!-- ---------- VIEW: settings & alerts ---------- -->
+    <section class="view" id="view-settings" hidden>
+      <div class="settings-grid">
+
+        <div class="panel">
+          <div class="panel-head">
+            <h2>Cảnh báo Telegram</h2>
+            <span class="conn-badge" id="notifyBadge" data-state="off">Chưa kết nối</span>
+          </div>
+          <p class="muted">Nhận tin nhắn khi tên miền sắp hết hạn, không phải nhớ vào từng nhà cung cấp để xem.</p>
+
+          <ol class="steps">
+            <li>Mở <a href="https://t.me/BotFather" target="_blank" rel="noopener noreferrer">@BotFather</a> trên Telegram, gõ <code>/newbot</code>, đặt tên rồi copy token nhận được.</li>
+            <li>Nhắn <code>/start</code> cho bot vừa tạo (bot không nhắn được trước cho người lạ).</li>
+            <li>Mở <a href="https://t.me/userinfobot" target="_blank" rel="noopener noreferrer">@userinfobot</a> để lấy <code>chat id</code> của bạn.</li>
+          </ol>
+
+          <div class="field-row">
+            <label class="field">
+              <span>Bot token</span>
+              <input id="setToken" type="password" placeholder="123456789:AAF..." autocomplete="off">
+            </label>
+            <label class="field">
+              <span>Chat ID</span>
+              <input id="setChatId" type="text" placeholder="987654321" autocomplete="off" inputmode="numeric">
+            </label>
+          </div>
+          <p class="hint" id="tokenHint"></p>
+
+          <div class="drawer-actions">
+            <button class="btn primary" id="btnSaveNotify" type="button">Lưu cấu hình</button>
+            <button class="btn" id="btnTestNotify" type="button">Gửi tin nhắn thử</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <h2>Trạng thái site qua Cloudflare</h2>
+            <span class="conn-badge" id="cfBadge" data-state="off">Chưa kết nối</span>
+          </div>
+          <p class="muted">RDAP trả lời <em>“tên miền còn hạn đến bao giờ”</em>. Cloudflare trả lời
+            <em>“tên miền có đang phục vụ gì không”</em> — hai câu khác nhau. Còn hạn 500 ngày mà
+            zone không có bản ghi A nào thì website vẫn tắt.</p>
+          <ol class="steps">
+            <li>Mở <a href="https://dash.cloudflare.com/profile/api-tokens" target="_blank"
+                      rel="noopener noreferrer">API Tokens</a> → <em>Create Token</em> →
+                <em>Custom token</em>.</li>
+            <li>Cấp đúng hai quyền <strong>đọc</strong>: <code>Zone : Zone : Read</code> và
+                <code>Zone : DNS : Read</code>. Không cần quyền ghi nào.</li>
+            <li>Dán token vào đây rồi <em>Kiểm tra</em>.</li>
+          </ol>
+          <label class="field">
+            <span>API token <em>(chỉ cần quyền đọc)</em></span>
+            <input id="cfToken" type="password" autocomplete="off" placeholder="•••••••••••••••">
+          </label>
+          <p class="muted" id="cfHint"></p>
+          <div class="btn-row">
+            <button class="btn primary" id="btnSaveCf" type="button">Lưu token</button>
+            <button class="btn" id="btnVerifyCf" type="button">Kiểm tra</button>
+            <button class="btn" id="btnSyncCf" type="button">Đồng bộ ngay</button>
+          </div>
+          <div id="cfResult" class="cf-result" hidden></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>Giao diện</h2></div>
+          <p class="muted">Lựa chọn lưu trong trình duyệt này. Chọn <em>Theo hệ thống</em> thì
+            giao diện tự đổi khi Windows chuyển sáng/tối.</p>
+          <div class="seg" id="themeSeg" role="group" aria-label="Chế độ giao diện">
+            <button class="seg-btn" data-theme-pref="light" type="button">
+              <svg class="ico" viewBox="0 0 16 16" aria-hidden="true">
+                <circle cx="8" cy="8" r="3.1"/>
+                <path d="M8 1.4v1.7M8 12.9v1.7M14.6 8h-1.7M3.1 8H1.4M12.66 3.34l-1.2 1.2M4.54 11.46l-1.2 1.2M12.66 12.66l-1.2-1.2M4.54 4.54l-1.2-1.2"/>
+              </svg>
+              <span>Sáng</span>
+            </button>
+            <button class="seg-btn" data-theme-pref="dark" type="button">
+              <svg class="ico" viewBox="0 0 16 16" aria-hidden="true">
+                <path d="M13.4 9.6A5.9 5.9 0 0 1 6.4 2.6a5.9 5.9 0 1 0 7 7Z"/>
+              </svg>
+              <span>Tối</span>
+            </button>
+            <button class="seg-btn" data-theme-pref="system" type="button">
+              <svg class="ico" viewBox="0 0 16 16" aria-hidden="true">
+                <rect x="1.8" y="2.8" width="12.4" height="8.4" rx="1.3"/>
+                <path d="M5.6 13.8h4.8M8 11.2v2.6"/>
+              </svg>
+              <span>Theo hệ thống</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>Ngưỡng cảnh báo</h2></div>
+          <p class="muted">Website tắt ngay khi tên miền hết hạn, nên đặt mốc đủ sớm để kịp gia hạn.</p>
+          <div class="field-row three">
+            <label class="field">
+              <span>Sắp hết hạn <em>(ngày)</em></span>
+              <input id="setWarn" type="number" min="1" max="365">
+            </label>
+            <label class="field">
+              <span>Nguy cấp <em>(ngày)</em></span>
+              <input id="setCrit" type="number" min="1" max="120">
+            </label>
+            <label class="field">
+              <span>Cache tra cứu <em>(giờ)</em></span>
+              <input id="setCache" type="number" min="0" max="168">
+            </label>
+          </div>
+          <div class="drawer-actions">
+            <button class="btn primary" id="btnSaveThresholds" type="button">Lưu ngưỡng</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <h2>Hàng chờ cảnh báo</h2>
+            <span class="muted" id="pendingSummary"></span>
+          </div>
+          <p class="muted">Mỗi tên miền chỉ được báo một lần cho mỗi mức độ khẩn. Khi bạn gia hạn xong, chu kỳ cảnh báo tự đặt lại.</p>
+          <div id="pendingList" class="pending-list"></div>
+          <div class="drawer-actions">
+            <button class="btn primary" id="btnSendNotify" type="button">Gửi cảnh báo ngay</button>
+            <button class="btn" id="btnForceNotify" type="button">Gửi lại tất cả</button>
+            <button class="btn danger" id="btnResetNotify" type="button">Đặt lại lịch sử</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>Chạy tự động hằng ngày</h2></div>
+          <p class="muted">Dán lệnh này vào Command Prompt (chạy bằng quyền Administrator) để Windows tự tra cứu và gửi cảnh báo lúc 8h sáng mỗi ngày.</p>
+          <pre class="code-block" id="cronCmd"></pre>
+          <div class="drawer-actions">
+            <button class="btn" id="btnCopyCron" type="button">Sao chép lệnh</button>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <footer class="page-foot">
+      <span>Domain Gateway</span>
+      <span class="sep">·</span>
+      <span>Nguồn: RDAP · WHOIS:43 · VNNIC/BKNS</span>
+      <span class="sep">·</span>
+      <span>Cảnh báo ở mốc {{ warn_days }} ngày, nguy cấp ở mốc {{ critical_days }} ngày</span>
+    </footer>
+  </main>
+</div>
+
+<!-- ============================ DRAWER ============================ -->
+<div class="drawer-scrim" id="drawerScrim" hidden></div>
+<aside class="drawer" id="drawer" hidden>
+  <header class="drawer-head">
+    <div>
+      <h2 id="drawerTitle">—</h2>
+      <span class="drawer-sub" id="drawerSub"></span>
+    </div>
+    <button class="icon-btn" id="drawerClose" type="button" aria-label="Đóng">
+      <svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8"/></svg>
+    </button>
+  </header>
+  <div class="drawer-body" id="drawerBody"></div>
+</aside>
+
+<!-- ============================ MODAL ============================ -->
+<div class="modal-scrim" id="modalScrim" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <header class="modal-head">
+      <h2 id="modalTitle">Thêm tên miền</h2>
+      <button class="icon-btn" id="modalClose" type="button" aria-label="Đóng">
+        <svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8"/></svg>
+      </button>
+    </header>
+    <div class="modal-body">
+      <label class="field">
+        <span>Tên miền <em>(mỗi dòng một tên miền, hoặc cách nhau bằng dấu phẩy)</em></span>
+        <textarea id="addDomains" rows="4" placeholder="vidu.com&#10;tenmien.io.vn"></textarea>
+      </label>
+
+      <!-- Nói thẳng ra là chỉ cần ô trên. Bốn ô còn lại gập lại vì hầu như
+           không ai phải điền, để trống chúng ra thì form nhìn như bắt khai hết. -->
+      <p class="auto-note" id="autoNote"></p>
+
+      <details class="reg-fold modal-fold" id="addMore">
+        <summary>
+          <span id="addMoreIco"></span>
+          <strong>Tuỳ chọn</strong>
+          <span class="fold-peek">Nhà cung cấp, tag, ngày hết hạn nhập tay — thường bỏ trống</span>
+        </summary>
+        <div class="fold-body">
+          <div class="field-row">
+            <label class="field">
+              <span>Nhà cung cấp <em>(nơi bạn mua — registry không biết)</em></span>
+              <input id="addProvider" list="providerList" type="text" placeholder="Namecheap, iNET, Porkbun...">
+              <datalist id="providerList"></datalist>
+            </label>
+            <label class="field">
+              <span>Tag <em>(cách nhau bằng dấu phẩy)</em></span>
+              <input id="addTags" type="text" placeholder="prod, shop">
+            </label>
+          </div>
+          <label class="field">
+            <span>Ngày hết hạn nhập tay <em>(chỉ dùng khi tra cứu tự động không ra)</em></span>
+            <input id="addExpires" type="date">
+          </label>
+          <label class="check">
+            <input id="addPinned" type="checkbox">
+            <span>Ưu tiên ngày nhập tay hơn dữ liệu registry</span>
+          </label>
+        </div>
+      </details>
+    </div>
+    <footer class="modal-foot">
+      <button class="btn ghost" id="modalCancel" type="button">Huỷ</button>
+      <button class="btn primary" id="modalSave" type="button">Thêm và tra cứu</button>
+    </footer>
+  </div>
+</div>
+
+<div class="toast-stack" id="toastStack"></div>
+
+<script src="{{ asset('app.js') }}"></script>
+</body>
+</html>

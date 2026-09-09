@@ -1,0 +1,64 @@
+# docker compose up -d
+#
+# Token đặt trong file .env cạnh file này (đã có trong .gitignore), KHÔNG viết
+# thẳng vào đây:
+#
+#   DG_TELEGRAM_TOKEN=123456789:AA...
+#   DG_TELEGRAM_CHAT=987654321
+#   DG_CF_TOKEN=...
+#   DG_BKNS_KEY=...
+
+services:
+  app:
+    build: .
+    image: domain-gateway
+    container_name: domain-gateway
+    restart: unless-stopped
+
+    ports:
+      # 127.0.0.1 ở đầu là CÓ CHỦ Ý. App không có đăng nhập — bất kỳ ai gọi được
+      # cổng này đều xoá được tên miền và đổi được cấu hình. Bỏ tiền tố đi là mở
+      # thẳng ra Internet. Muốn truy cập từ xa thì đặt sau reverse proxy có xác
+      # thực, hoặc đi qua VPN/SSH tunnel.
+      - "127.0.0.1:8787:8787"
+
+    environment:
+      TZ: Asia/Ho_Chi_Minh
+      # config.json nằm trong volume chứ không trong image: /app do root sở
+      # hữu nên tiến trình không ghi được, và để ở đó thì dựng lại image là
+      # mất token. Đã đặt sẵn trong Dockerfile, ghi lại đây cho rõ.
+      DG_CONFIG: /app/data/config.json
+      # config.py đọc sẵn mấy biến này, nên không cần mount config.json chỉ để
+      # nhét token vào.
+      DG_TELEGRAM_TOKEN: ${DG_TELEGRAM_TOKEN:-}
+      DG_TELEGRAM_CHAT: ${DG_TELEGRAM_CHAT:-}
+      DG_CF_TOKEN: ${DG_CF_TOKEN:-}
+      DG_BKNS_KEY: ${DG_BKNS_KEY:-}
+      # KHÔNG đặt mặc định ở đây: config.py cho biến môi trường thắng file,
+      # nên một giá trị mặc định cứng sẽ âm thầm ghi đè ngưỡng người dùng vừa
+      # lưu ở trang Cài đặt, mỗi lần container khởi động lại. Để rỗng thì
+      # `if os.environ.get(env)` coi là chưa khai và config.json được dùng.
+      DG_WARN_DAYS: ${DG_WARN_DAYS:-}
+      DG_CRITICAL_DAYS: ${DG_CRITICAL_DAYS:-}
+
+    volumes:
+      # SQLite + lịch sử tra cứu. Không có dòng này thì `docker compose down`
+      # là mất sạch dữ liệu.
+      - dg-data:/app/data
+
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8787/api/summary', timeout=4).status == 200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  dg-data:
+    # Ghim tên tuyệt đối. Không có dòng này thì compose thêm tiền tố tên thư
+    # mục (`domain_gateway_dg-data`), trong khi lệnh sao lưu trong tài liệu
+    # dùng tên trần `dg-data` — và `docker run -v dg-data:/data` không báo
+    # lỗi khi volume chưa có, nó lặng lẽ tạo một cái RỖNG. Bản sao lưu ra
+    # file vài chục byte, thoát mã 0, chỉ lộ ra lúc cần khôi phục.
+    name: dg-data

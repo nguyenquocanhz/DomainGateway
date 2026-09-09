@@ -1,0 +1,116 @@
+# Dựng image và đẩy lên GitHub Container Registry.
+#
+# Người dùng cuối không phải clone, không phải cài Python:
+#     docker run -d -p 127.0.0.1:8787:8787 -v dg-data:/app/data ghcr.io/<chu-repo>/<ten-repo>
+#
+# Workflow này cũng là bài kiểm Dockerfile duy nhất của dự án: bước "hun khói"
+# chạy thật container rồi gọi /api/summary. Image hỏng thì job đỏ TRƯỚC khi
+# đẩy lên registry, không ai kéo phải bản chết.
+
+name: docker
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v5
+
+      # ghcr.io chỉ nhận tên viết thường, mà tên repo trên GitHub thì có hoa.
+      - name: Tên image viết thường
+        id: ten
+        run: echo "image=${REGISTRY}/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+      # QEMU phải đăng ký TRƯỚC khi tạo builder: buildkitd đọc binfmt_misc một
+      # lần lúc khởi động worker, đăng ký sau thì builder không quảng cáo
+      # linux/arm64. Chạy cả trên pull request cũng vô hại, mất vài giây.
+      - uses: docker/setup-qemu-action@v3
+
+      - uses: docker/setup-buildx-action@v3
+
+      # ---- Hun khói: dựng cho amd64, chạy thử, rồi mới tính chuyện đẩy ------
+      - name: Dựng image amd64 để thử
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: dg-thu:test
+          cache-from: type=gha
+          # ignore-error: PR tu fork khong co quyen ghi cache GHA, thieu co nay
+          # thi job do vi loi export cache chu khong phai vi ma nguon.
+          cache-to: type=gha,mode=max,ignore-error=true
+
+      - name: Chạy thử container
+        run: |
+          docker run -d --name dg-thu -p 8787:8787 dg-thu:test
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8787/api/summary > /dev/null; then
+              echo "API trả lời sau ${i}s"
+              break
+            fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:8787/api/summary
+          # Trang chủ phải render được template, không chỉ trả 200 rỗng
+          curl -fsS http://127.0.0.1:8787/ | grep -q "Domain Gateway"
+          echo "OK: image chạy được"
+
+      - name: Nhật ký container khi hỏng
+        if: failure()
+        run: docker logs dg-thu || true
+
+      - name: Dọn container thử
+        if: always()
+        run: docker rm -f dg-thu || true
+
+      # ---- Đẩy lên registry (bỏ qua với pull request) ----------------------
+      - name: Đăng nhập ghcr.io
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Nhãn cho image
+        if: github.event_name != 'pull_request'
+        id: nhan
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.ten.outputs.image }}
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      # arm64 cho VPS Ampere/Graviton và Raspberry Pi. Mọi thư viện trong
+      # requirements.txt đều có wheel aarch64 nên không phải biên dịch,
+      # nhưng chạy qua QEMU vẫn chậm hơn amd64 vài phút.
+      - name: Dựng và đẩy
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.nhan.outputs.tags }}
+          labels: ${{ steps.nhan.outputs.labels }}
+          cache-from: type=gha
+          # ignore-error: PR tu fork khong co quyen ghi cache GHA, thieu co nay
+          # thi job do vi loi export cache chu khong phai vi ma nguon.
+          cache-to: type=gha,mode=max,ignore-error=true

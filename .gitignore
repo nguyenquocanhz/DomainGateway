@@ -1,0 +1,35 @@
+# ---- Bí mật: KHÔNG bao giờ đẩy lên -----------------------------------------
+# config.json giữ key BKNS, bot token Telegram và API token Cloudflare.
+# Mẫu để chép ra là config.example.json (mọi trường bí mật đều để rỗng).
+config.json
+.env
+*.env
+
+# ---- Dữ liệu tên miền của bạn ----------------------------------------------
+# gateway.db chứa tên miền, nhà đăng ký, ngày hết hạn, ghi chú — tài sản riêng,
+# không phải mã nguồn. domains.seed.json là danh sách thật của bạn; bản để
+# chia sẻ là domains.example.json.
+data/*.db
+data/*.db-wal
+data/*.db-shm
+data/domains.seed.json
+data/domains.csv
+data/domains.json
+
+# Kết quả xuất báo cáo
+*.xlsx
+*.pdf
+bao-cao.md
+
+# Bản sao lưu volume: bên trong có config.json (token) và cả SQLite.
+# Tài liệu deploy có lệnh tạo file này — đừng để một lần `git add -A` là xong.
+dg-*.tar.gz
+*.tar.gz
+
+# ---- Rác chạy máy -----------------------------------------------------------
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+.DS_Store

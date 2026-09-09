@@ -1,0 +1,19 @@
+# Domain Gateway
+# Python 3.9+ (đã kiểm thử trên 3.14)
+
+#
+# Ghim cả trần theo major: chỉ có sàn thì cài lại sau vài tháng ra bộ thư viện
+# khác hẳn, và một bản vá gây lỗi cũng không truy ngược được.
+
+requests>=2.31,<3      # gọi RDAP / BKNS / Telegram
+flask>=3.0,<4          # dashboard web
+rich>=13.0,<15         # bảng màu cho CLI (tuỳ chọn, CLI vẫn chạy nếu thiếu)
+
+# Xuất file. Cả hai đều tuỳ chọn: thiếu thì CSV/JSON/Markdown vẫn chạy bình
+# thường, chỉ riêng định dạng tương ứng báo lỗi có hướng dẫn cài.
+openpyxl>=3.1,<4       # xuất .xlsx
+reportlab>=4.0,<5      # xuất .pdf (tự nhúng font hệ thống để có dấu tiếng Việt)
+
+# WHOIS port 43 dùng socket của thư viện chuẩn — không cần package ngoài.
+# SQLite dùng sqlite3 có sẵn trong Python.
+# Markdown và CSV sinh bằng thư viện chuẩn.

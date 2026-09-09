@@ -1,0 +1,109 @@
+{
+  "_meta": {
+    "mo_ta": "Danh bạ nhà đăng ký tên miền theo khu vực, dùng cho gợi ý provider trong Domain Gateway.",
+    "cap_nhat": "2026-09-08",
+    "luu_y": "Giá và chính sách thay đổi theo thời điểm — luôn kiểm tra lại trên trang chính thức trước khi mua."
+  },
+
+  "vietnam": {
+    "registry": {
+      "ten": "VNNIC - Trung tâm Internet Việt Nam",
+      "url": "https://vnnic.vn",
+      "tra_cuu": "https://tracuutenmien.gov.vn",
+      "whois_port43": "whois.vnnic.vn",
+      "ghi_chu": "Cơ quan quản lý toàn bộ tên miền .vn. Không bán trực tiếp, phải qua nhà đăng ký được cấp phép."
+    },
+    "tlds": [".vn", ".com.vn", ".net.vn", ".org.vn", ".edu.vn", ".gov.vn", ".biz.vn", ".info.vn", ".pro.vn", ".name.vn", ".health.vn", ".io.vn", ".id.vn", ".ai.vn"],
+    "yeu_cau": "Tên miền .vn cần định danh chủ thể: cá nhân dùng CCCD/hộ chiếu, tổ chức dùng giấy phép kinh doanh. Bắt buộc khai báo với Bộ TT&TT sau khi đăng ký.",
+    "nha_dang_ky": [
+      {"ten": "iNET", "url": "https://inet.vn", "whois": "https://whois.inet.vn", "api": "Không công khai", "ghi_chu": "Một trong các nhà đăng ký lớn nhất VN, trang whois.inet.vn tra cứu miễn phí cả tên miền quốc tế."},
+      {"ten": "GMO-Z.com RUNSYSTEM", "url": "https://z.com/vn", "api": "Không công khai", "ghi_chu": "Đơn vị đứng sau nhiều tên miền .id.vn giá rẻ."},
+      {"ten": "TENTEN", "url": "https://tenten.vn", "api": "Không công khai", "ghi_chu": "Thuộc GMO Internet Group (Nhật)."},
+      {"ten": "PA Việt Nam", "url": "https://www.pavietnam.vn", "api": "Có API cho đại lý", "ghi_chu": "Hệ sinh thái hosting + domain lâu năm."},
+      {"ten": "Mắt Bão", "url": "https://www.matbao.net", "api": "Có API cho đại lý"},
+      {"ten": "Nhân Hòa", "url": "https://nhanhoa.com", "api": "Không công khai"},
+      {"ten": "BKNS", "url": "https://www.bkns.vn", "whois": "https://whois.bkns.vn", "api": "https://whois.bkns.vn/vi/docs", "ghi_chu": "Cung cấp REST API WHOIS có key demo công khai — nguồn dữ liệu .vn mà Domain Gateway đang dùng."},
+      {"ten": "Viettel IDC", "url": "https://viettelidc.com.vn", "api": "Không công khai"},
+      {"ten": "VNPT", "url": "https://domain.vnpt.vn", "api": "Không công khai"},
+      {"ten": "FPT Telecom", "url": "https://fpt.vn", "api": "Không công khai"},
+      {"ten": "Vietnix", "url": "https://vietnix.vn", "whois": "https://vietnix.vn/whois/", "api": "Không công khai"},
+      {"ten": "AZDIGI", "url": "https://azdigi.com", "api": "Không công khai"},
+      {"ten": "Long Vân", "url": "https://longvan.net", "api": "Không công khai"},
+      {"ten": "Vinahost", "url": "https://vinahost.vn", "api": "Không công khai"},
+      {"ten": "HostVN", "url": "https://hostvn.net", "api": "Không công khai"},
+      {"ten": "Tinohost", "url": "https://tinohost.com", "api": "Không công khai"},
+      {"ten": "Digistar", "url": "https://digistar.vn", "api": "Không công khai"},
+      {"ten": "CMC Telecom", "url": "https://cmctelecom.vn", "api": "Không công khai"}
+    ]
+  },
+
+  "eu": {
+    "registry": {
+      "ten": "EURid",
+      "url": "https://eurid.eu",
+      "whois_web": "https://whois.eurid.eu",
+      "whois_port43": "whois.eu",
+      "rdap": "https://rdap.eurid.eu/domain/{domain}",
+      "ghi_chu": "Registry của .eu (và .ею / .ευ). WHOIS ẩn dữ liệu cá nhân theo GDPR."
+    },
+    "tlds": [".eu", ".ею (Cyrillic)", ".ευ (Greek)"],
+    "yeu_cau": "Chủ thể phải cư trú tại EU/EEA, HOẶC là công dân EU cư trú bất kỳ đâu trên thế giới (áp dụng từ 2019), HOẶC là tổ chức thành lập trong EU/EEA. Không đáp ứng thì phải dùng dịch vụ trustee/local presence có phí.",
+    "nha_dang_ky": [
+      {"ten": "Gandi", "url": "https://www.gandi.net", "quoc_gia": "Pháp", "api": "https://api.gandi.net/docs/", "ghi_chu": "REST API đầy đủ, có sandbox. Bao gồm WHOIS privacy miễn phí."},
+      {"ten": "OVHcloud", "url": "https://www.ovhcloud.com", "quoc_gia": "Pháp", "api": "https://api.ovh.com/", "ghi_chu": "API rất mạnh, quản lý cả VPS/DNS/domain."},
+      {"ten": "IONOS", "url": "https://www.ionos.com", "quoc_gia": "Đức", "api": "https://developer.hosting.ionos.com/"},
+      {"ten": "Hetzner", "url": "https://www.hetzner.com", "quoc_gia": "Đức", "api": "DNS API công khai; domain qua konsoleH"},
+      {"ten": "EuroDNS", "url": "https://www.eurodns.com", "quoc_gia": "Luxembourg", "api": "Có API cho đại lý", "ghi_chu": "Chuyên ccTLD châu Âu, hỗ trợ trustee cho nhiều nước."},
+      {"ten": "united-domains", "url": "https://www.united-domains.de", "quoc_gia": "Đức", "api": "Có API cho đại lý"},
+      {"ten": "InternetX", "url": "https://www.internetx.com", "quoc_gia": "Đức", "api": "AutoDNS API", "ghi_chu": "Nền tảng bán buôn, phù hợp khi quản lý số lượng lớn."},
+      {"ten": "Key-Systems (CentralNic)", "url": "https://www.key-systems.net", "quoc_gia": "Đức", "api": "Có API bán buôn"},
+      {"ten": "Netim", "url": "https://www.netim.com", "quoc_gia": "Pháp", "api": "REST + EPP", "ghi_chu": "Hỗ trợ hơn 1000 TLD kể cả ccTLD khó."},
+      {"ten": "Openprovider", "url": "https://www.openprovider.com", "quoc_gia": "Hà Lan", "api": "https://docs.openprovider.com/", "ghi_chu": "Mô hình membership, giá bán buôn tốt."},
+      {"ten": "Realtime Register", "url": "https://www.realtimeregister.com", "quoc_gia": "Hà Lan", "api": "REST API bán buôn"},
+      {"ten": "TransIP", "url": "https://www.transip.nl", "quoc_gia": "Hà Lan", "api": "https://api.transip.nl/"},
+      {"ten": "Combell", "url": "https://www.combell.com", "quoc_gia": "Bỉ", "api": "Có API"},
+      {"ten": "Hostinger", "url": "https://www.hostinger.com", "quoc_gia": "Litva", "api": "Hạn chế"},
+      {"ten": "Namecheap", "url": "https://www.namecheap.com", "quoc_gia": "Mỹ (bán .eu)", "api": "https://www.namecheap.com/support/api/intro/"},
+      {"ten": "Porkbun", "url": "https://porkbun.com", "quoc_gia": "Mỹ (bán .eu)", "api": "https://porkbun.com/api/json/v3/documentation"}
+    ]
+  },
+
+  "myanmar": {
+    "registry": {
+      "ten": "Myanmar Network Information Center (MMNIC) - MPT / Bộ Giao thông và Truyền thông",
+      "url": "https://www.registry.gov.mm",
+      "url_phu": "https://www.ptd.gov.mm/nic.aspx",
+      "whois_port43": "whois.registry.gov.mm",
+      "ghi_chu": "Registry .mm do nhà nước Myanmar vận hành. Website đôi khi không truy cập được từ ngoài Myanmar."
+    },
+    "tlds": [".com.mm", ".net.mm", ".org.mm", ".edu.mm (hạn chế)", ".gov.mm (hạn chế)", ".per.mm"],
+    "yeu_cau": "KHÔNG đăng ký trực tiếp ở cấp .mm — chỉ cấp 3 như .com.mm. Cần pháp nhân đăng ký tại Myanmar; người nước ngoài phải mua kèm dịch vụ trustee/local representative (phụ phí). .edu.mm và .gov.mm chỉ dành cho tổ chức giáo dục và cơ quan nhà nước.",
+    "canh_bao": "Giá .mm cao hơn nhiều so với gTLD (thường 100-400 USD/năm tuỳ registrar và có kèm trustee hay không), thời gian duyệt hồ sơ có thể mất nhiều ngày.",
+    "nha_dang_ky": [
+      {"ten": "Nominus", "url": "https://www.nominus.com/en/dm/mm-domain-names-myanmar", "loai": "Corporate registrar quốc tế", "trustee": true},
+      {"ten": "Marcaria", "url": "https://www.marcaria.com/ws/en/domains/myanmar-domain-registration-mm", "loai": "Corporate registrar quốc tế", "trustee": true},
+      {"ten": "Web Solutions", "url": "https://web-solutions.eu/mm-domain-name-registration.htm", "loai": "Registrar EU chuyên ccTLD khó", "trustee": true},
+      {"ten": "AsiaRegister", "url": "https://www.asiaregister.com/en/domains/tlds/mm", "loai": "Registrar khu vực châu Á", "trustee": true},
+      {"ten": "AtakDomain", "url": "https://www.atakdomain.com/en/domain-registration/myanmar/com-mm", "loai": "Registrar quốc tế"},
+      {"ten": "Let's Domains", "url": "https://letsdomains.com/domain-database/com.mm", "loai": "Registrar quốc tế"},
+      {"ten": "EuroDNS", "url": "https://www.eurodns.com", "loai": "Registrar EU", "trustee": true},
+      {"ten": "Com Laude / MarkMonitor / CSC", "url": "https://comlaude.com", "loai": "Corporate brand protection", "ghi_chu": "Dành cho doanh nghiệp lớn cần bảo vệ thương hiệu, chi phí cao."}
+    ],
+    "so_sanh_gia": "https://tld-list.com/tld/mm"
+  },
+
+  "quoc_te": {
+    "mo_ta": "Nhà đăng ký phổ biến cho gTLD (.com .net .store .site .io ...).",
+    "nha_dang_ky": [
+      {"ten": "Cloudflare Registrar", "url": "https://www.cloudflare.com/products/registrar/", "api": "https://developers.cloudflare.com/api/", "ghi_chu": "Bán đúng giá gốc, không markup, không bán lẻ .vn/.eu. Bắt buộc dùng DNS của Cloudflare. Có API liệt kê domain: GET /accounts/{id}/registrar/domains"},
+      {"ten": "Porkbun", "url": "https://porkbun.com", "api": "https://porkbun.com/api/json/v3/documentation", "ghi_chu": "API v3 miễn phí, tự bật trong Account Settings. WHOIS privacy + SSL miễn phí."},
+      {"ten": "Namecheap", "url": "https://www.namecheap.com", "api": "https://www.namecheap.com/support/api/intro/", "ghi_chu": "API XML, cần whitelist IP và đạt điều kiện tài khoản (20+ domain hoặc số dư/chi tiêu tối thiểu)."},
+      {"ten": "Spaceship", "url": "https://www.spaceship.com", "api": "https://docs.spaceship.dev/", "ghi_chu": "Cùng tập đoàn với Namecheap, API REST hiện đại hơn."},
+      {"ten": "Dynadot", "url": "https://www.dynadot.com", "api": "https://www.dynadot.com/domain/api3.html"},
+      {"ten": "NameSilo", "url": "https://www.namesilo.com", "api": "https://www.namesilo.com/api-reference", "ghi_chu": "WHOIS privacy miễn phí trọn đời, API đơn giản."},
+      {"ten": "GoDaddy", "url": "https://www.godaddy.com/vi-vn", "api": "https://developer.godaddy.com/", "ghi_chu": "CẢNH BÁO: từ 05/2024 API kiểm tra tên miền chỉ mở cho tài khoản có 50+ domain; API quản lý/DNS cần 1+ domain hoặc gói Domain Pro."},
+      {"ten": "Sav", "url": "https://www.sav.com", "api": "Có API"},
+      {"ten": "Gandi", "url": "https://www.gandi.net", "api": "https://api.gandi.net/docs/"}
+    ]
+  }
+}

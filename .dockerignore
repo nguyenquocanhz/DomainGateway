@@ -1,0 +1,43 @@
+# KHÔNG bao giờ đưa vào image: mấy file này giữ bot token Telegram, API token
+# Cloudflare và key BKNS. Ai lấy được image là lấy được token — dùng biến môi
+# trường hoặc mount lúc chạy, xem docker-compose.yml.
+#
+# .env đặc biệt nguy hiểm: chính docker-compose.yml bảo để token vào đó, còn
+# Dockerfile thì COPY . . — thiếu dòng này là token bị nướng thẳng vào image,
+# rồi CI đẩy image đó lên ghcr.io công khai.
+config.json
+.env
+*.env
+
+# Dữ liệu chạy thật. Nằm ở volume, không phải trong image.
+data/*.db
+data/*.db-wal
+data/*.db-shm
+
+# Danh sách tên miền THẬT của người dùng, và mọi báo cáo xuất ra từ nó.
+# .gitignore chặn rồi nhưng .dockerignore là file riêng — quên là image mang
+# theo nguyên danh mục.
+data/domains.seed.json
+data/domains.csv
+data/domains.json
+*.xlsx
+*.pdf
+bao-cao.md
+
+# Bản sao lưu volume — bên trong có cả config.json lẫn SQLite.
+dg-*.tar.gz
+*.tar.gz
+
+# Ảnh minh hoạ README — gần 1 MB, không liên quan gì tới lúc chạy
+docs/img/
+
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+.git/
+.gitignore
+Dockerfile
+.dockerignore

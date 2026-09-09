@@ -1,0 +1,29 @@
+{
+  "_huong_dan": "Copy file này thành config.json rồi chỉnh sửa. config.json đã được .gitignore.",
+
+  "bkns_api_key": "",
+  "_bkns_note": "Chỉ cần cho tên miền .vn (RDAP quốc tế không cần key). Lấy key demo miễn phí ở https://whois.bkns.vn/vi/docs — 2 request/phút, 200/ngày mỗi IP, đủ cho vài chục tên miền nếu bật cache.",
+  "bkns_rpm": 2,
+
+  "rdap_rpm": 0,
+  "_rdap_note": "0 = không giới hạn. RDAP miễn phí, không cần key. Nếu bị 429 thì đặt 30-60.",
+
+  "timeout": 25,
+  "workers": 6,
+  "cache_ttl_hours": 12,
+
+  "warn_days": 30,
+  "critical_days": 7,
+
+  "host": "127.0.0.1",
+  "port": 8787,
+
+  "_cloudflare": "Token doc-chi tu dash.cloudflare.com/profile/api-tokens. Chi can Zone:Read + Zone.DNS:Read, khong can quyen ghi nao.",
+  "cloudflare_api_token": "",
+
+  "notify": {
+    "telegram_bot_token": "",
+    "telegram_chat_id": "",
+    "_note": "Để trống thì bỏ qua thông báo. Tạo bot qua @BotFather, lấy chat_id qua @userinfobot."
+  }
+}
