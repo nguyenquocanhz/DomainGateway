@@ -125,11 +125,20 @@ def _than_json() -> dict:
     try:
         # lam_sach truoc khi tra ve: mot surrogate lac hay ky tu dieu khien o
         # bat ky truong nao cung lam sqlite/openpyxl nem loi o tang duoi.
-        return lam_sach(than)
+        sach = lam_sach(than)
     except ValueError:
         # Long qua sau. Tra dict rong -> handler tu bao thieu truong bat buoc,
         # dung nhu truoc khi co lam_sach (400 chu khong phai 500).
         return {}
+    # NGOAI LE: truong tro thanh KHOA CHINH phai toi normalize_domain NGUYEN
+    # VEN de no con tu choi duoc. Don am tham o day la bien "ab.com" thanh
+    # "ab.com" - khoa cua mot ten mien KHAC dang co that - roi POST ghi de len
+    # provider/note cua no ma tra ve 201. Don gia tri thi tot, don KHOA thi
+    # khong.
+    for khoa in ("domain", "domains"):
+        if khoa in than:
+            sach[khoa] = than[khoa]
+    return sach
 
 
 def _danh_ba_hop_le(sections: object) -> bool:
@@ -380,8 +389,13 @@ def create_app(cfg: dict = None, store: Store = None) -> Flask:
 
     @app.delete("/api/domains/<domain>")
     def api_delete(domain):
-        store.delete(normalize_domain(domain))
-        return jsonify({"deleted": domain})
+        chuan = normalize_domain(domain)
+        # Khong co thi noi thang. Truoc day luon tra {"deleted": ...} ke ca khi
+        # khong xoa gi - cung loai "man hinh noi doi": nguoi dung tuong da xoa.
+        if not chuan or not store.get(chuan):
+            return jsonify({"error": "Không tìm thấy tên miền"}), 404
+        store.delete(chuan)
+        return jsonify({"deleted": chuan})
 
     # ---- tra cuu nen ------------------------------------------------------
     def _worker(names):
@@ -397,25 +411,44 @@ def create_app(cfg: dict = None, store: Store = None) -> Flask:
                 else:
                     job.failed.append({"domain": rec.domain, "error": rec.error})
 
+        da_luu = 0
         try:
             for rec in resolver.lookup_many(names, progress=progress):
                 try:
                     store.save_lookup(rec)
+                    da_luu += 1
                 except Exception as exc:                     # noqa: BLE001
                     # Bao ve TUNG ban ghi. Truoc day mot loi o day thoat ra
                     # khoi vong for, nen moi ten mien phia sau khong bao gio
                     # duoc ghi - trong khi `finally` van dat finished_at va
                     # progress() da dem chung vao job.ok. Man hinh bao
                     # "xong 9/9, loi 0" trong khi kho chi co 3 ban ghi moi.
-                    # Khong nen: lang le mat du lieu ma nhin nhu thanh cong.
                     with job.lock:
                         if rec.expires_at:
+                            # Tra cuu duoc nhung khong luu duoc: rut khoi ok,
+                            # them vao failed.
                             job.ok = max(0, job.ok - 1)
-                        job.failed.append({
-                            "domain": rec.domain,
-                            "error": "không lưu được: " + type(exc).__name__,
-                        })
-            store.set_meta("last_refresh", iso(utcnow()))
+                            job.failed.append({
+                                "domain": rec.domain,
+                                "error": "không lưu được: " + type(exc).__name__,
+                            })
+                        else:
+                            # Tra cuu da hong san -> progress() DA them vao
+                            # failed roi. Them lan nua la mot ten mien dem hai
+                            # lan, toast in "6 chua doc duoc" cho mot job 4 ten
+                            # mien. Chi ghi them ly do.
+                            for m in job.failed:
+                                if m.get("domain") == rec.domain:
+                                    m["error"] = ((m.get("error") or "")
+                                                  + " · không lưu được: "
+                                                  + type(exc).__name__).strip(" ·")
+                                    break
+            # Chi danh dau da tra cuu khi THAT SU co ban ghi xuong dia. Truoc
+            # day loi save_lookup thoat ra khoi vong nen dong nay bi bo qua;
+            # gio loi bi bat, neu van dat moc thi giao dien in "Tra cuu vua
+            # xong" trong khi khong co gi duoc luu.
+            if da_luu:
+                store.set_meta("last_refresh", iso(utcnow()))
         finally:
             with job.lock:
                 job.running = False

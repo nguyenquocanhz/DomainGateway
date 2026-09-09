@@ -86,12 +86,21 @@ def normalize_domain(raw: str) -> str:
     """Chap nhan URL day du, dau cham cuoi, IDN tieng Viet -> tra ve punycode.
 
     Day la cua chung cua MOI chuoi ten mien: query string cua /api/lookup, than
-    JSON, tham so dong lenh, file .txt cua `cli.py import`. Nen don o day thi
-    khong con duong nao dua surrogate lac hay ky tu dieu khien vao khoa chinh
-    cua bang - `.encode("idna")` ben duoi nem UnicodeError voi chung roi bi bat
-    im, nen chung di lot nguyen ven.
+    JSON, tham so dong lenh, file .txt cua `cli.py import`.
+
+    Ky tu dieu khien va surrogate lac -> TRA VE CHUOI RONG, khong don roi dung
+    tiep. Ket qua ham nay la KHOA CHINH cua bang, nen don am tham la doi mot
+    chuoi rac thanh khoa cua MOT TEN MIEN KHAC dang co that: "a\x01b.com" don
+    ra "ab.com", the la PATCH ghi de va DELETE xoa nham no - ma van tra 200.
+    Da do that. Tra chuoi rong thi handler tu ra 400/404 nhu truoc.
+
+    (`.encode("idna")` ben duoi nem UnicodeError voi may ky tu do roi bi bat
+    im, nen khong the trong cho no chan giup.)
     """
-    d = lam_sach((raw or "")).strip().lower()
+    tho = raw or ""
+    if lam_sach(tho) != tho:
+        return ""
+    d = tho.strip().lower()
     d = re.sub(r"^[a-z]+://", "", d)
     d = d.split("/")[0].split("?")[0].split("#")[0]
     d = d.split("@")[-1].split(":")[0]

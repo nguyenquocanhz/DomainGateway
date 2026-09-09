@@ -99,6 +99,11 @@ def cmd_import(args, store: Store, cfg: dict) -> int:
 
 def cmd_add(args, store: Store, cfg: dict) -> int:
     domain = normalize_domain(args.domain)
+    # normalize_domain tra chuoi rong khi dau vao co ky tu khong hop le. Khong
+    # chan o day thi kho co mot ban ghi ten "" khong xoa duoc tu giao dien.
+    if not domain or "." not in domain:
+        _print(f"Ten mien khong hop le: {args.domain!r}")
+        return 1
     # argv cung la du lieu ngoai: dan mot doan copy tu terminal vao --note la
     # co the mang theo ky tu dieu khien. normalize_domain da don `domain`.
     store.add(
@@ -238,7 +243,7 @@ def cmd_list(args, store: Store, cfg: dict) -> int:
 
 
 def _ghi_an_toan(duong_dan: str, noi_dung, nhi_phan: bool = False,
-                 ma_hoa: str = "utf-8") -> None:
+                 ma_hoa: str = "utf-8", xuong_dong_tho: bool = False) -> None:
     """Dung noi dung XONG roi moi cham vao file dich.
 
     `open(dich, "w")` cat cut file ve 0 byte NGAY LUC MO, truoc khi ham dung
@@ -254,9 +259,24 @@ def _ghi_an_toan(duong_dan: str, noi_dung, nhi_phan: bool = False,
             with open(tam, "wb") as fh:
                 fh.write(noi_dung)
         else:
-            with open(tam, "w", encoding=ma_hoa, newline="") as fh:
+            # newline="" CHI can cho CSV (module csv tu quan ly ket dong). Dat
+            # cho moi dich thi JSON/Markdown tren Windows doi CRLF thanh LF so
+            # voi ban cu.
+            with open(tam, "w", encoding=ma_hoa,
+                      newline=("" if xuong_dong_tho else None)) as fh:
                 fh.write(noi_dung)
         os.replace(tam, duong_dan)
+    except OSError as exc:
+        try:
+            os.remove(tam)
+        except OSError:
+            pass
+        # Tren Windows os.replace doi dich mo kem co FILE_SHARE_DELETE, ma
+        # open() cua Python khong cap. Mot trinh soan thao / OneDrive /
+        # antivirus dang giu file xuat la du de nem WinError 5. Bao cho ro
+        # thay vi de traceback tran roi bo do cac dich con lai.
+        raise OSError(f"khong ghi duoc {duong_dan}: {exc}. "
+                      f"Dong chuong trinh dang mo file do roi thu lai.") from exc
     except BaseException:
         try:
             os.remove(tam)
@@ -266,51 +286,73 @@ def _ghi_an_toan(duong_dan: str, noi_dung, nhi_phan: bool = False,
 
 
 def cmd_export(args, store: Store, cfg: dict) -> int:
+    """Xuat ra nhieu dinh dang mot lan.
+
+    Moi dich duoc boc rieng: mot dich hong - thieu thu vien, file dang bi mo,
+    thu muc chi doc - khong duoc lam cac dich con lai khong bao gio duoc ghi.
+    Truoc day mot OSError o dich thu hai la traceback tran va hai dich sau im
+    lang bien mat.
+    """
     warn, crit = int(cfg["warn_days"]), int(cfg["critical_days"])
     rows = [r.to_dict(warn, crit) for r in store.all()]
+    records = store.all()
+    hong = []
+
+    def thu(nhan, duong_dan, dung, thieu_thu_vien, **kw):
+        """dung() dung noi dung; chi cham vao file dich khi da dung xong."""
+        try:
+            _ghi_an_toan(duong_dan, dung(), **kw)
+            _print(f"Da xuat {nhan}: {duong_dan}")
+        except ImportError:
+            _print(thieu_thu_vien)
+            hong.append(nhan)
+        except OSError as exc:
+            _print(f"Loi khi xuat {nhan}: {exc}")
+            hong.append(nhan)
+
     if args.json:
-        _ghi_an_toan(args.json, json.dumps(rows, ensure_ascii=False, indent=2))
-        _print(f"Da xuat JSON: {args.json}")
+        thu("JSON", args.json,
+            lambda: json.dumps(rows, ensure_ascii=False, indent=2), "")
+
     if args.csv:
         cols = ["domain", "status", "days_left", "expires_at", "provider", "registrar",
                 "created_at", "nameservers", "auto_renew", "tags", "source", "note", "error"]
-        dem = io.StringIO()
-        writer = csv.DictWriter(dem, fieldnames=cols, extrasaction="ignore")
-        writer.writeheader()
-        for row in rows:
-            row = dict(row)
-            row["nameservers"] = ", ".join(row.get("nameservers") or [])
-            row["tags"] = ", ".join(row.get("tags") or [])
-            writer.writerow(row)
-        _ghi_an_toan(args.csv, dem.getvalue(), ma_hoa="utf-8-sig")
-        _print(f"Da xuat CSV: {args.csv}")
-    records = store.all()
+
+        def dung_csv():
+            dem = io.StringIO()
+            writer = csv.DictWriter(dem, fieldnames=cols, extrasaction="ignore")
+            writer.writeheader()
+            for row in rows:
+                row = dict(row)
+                row["nameservers"] = ", ".join(row.get("nameservers") or [])
+                row["tags"] = ", ".join(row.get("tags") or [])
+                writer.writerow(row)
+            return dem.getvalue()
+
+        thu("CSV", args.csv, dung_csv, "", ma_hoa="utf-8-sig", xuong_dong_tho=True)
 
     if args.md:
         from gateway import exporters
-        _ghi_an_toan(args.md, exporters.to_markdown(records, warn, crit))
-        _print(f"Da xuat Markdown: {args.md}")
+        thu("Markdown", args.md,
+            lambda: exporters.to_markdown(records, warn, crit), "")
 
     if args.xlsx:
-        try:
-            from gateway import exporters
-            _ghi_an_toan(args.xlsx, exporters.to_xlsx(records, warn, crit), nhi_phan=True)
-            _print(f"Da xuat Excel: {args.xlsx}")
-        except ImportError:
-            _print("Thieu thu vien openpyxl. Chay: pip install openpyxl")
-            return 1
+        from gateway import exporters
+        thu("Excel", args.xlsx,
+            lambda: exporters.to_xlsx(records, warn, crit),
+            "Thieu thu vien openpyxl. Chay: pip install openpyxl", nhi_phan=True)
 
     if args.pdf:
-        try:
-            from gateway import exporters
-            _ghi_an_toan(args.pdf, exporters.to_pdf(records, warn, crit), nhi_phan=True)
-            _print(f"Da xuat PDF: {args.pdf}")
-        except ImportError:
-            _print("Thieu thu vien reportlab. Chay: pip install reportlab")
-            return 1
+        from gateway import exporters
+        thu("PDF", args.pdf,
+            lambda: exporters.to_pdf(records, warn, crit),
+            "Thieu thu vien reportlab. Chay: pip install reportlab", nhi_phan=True)
 
     if not any((args.json, args.csv, args.md, args.xlsx, args.pdf)):
         print(json.dumps(rows, ensure_ascii=False, indent=2))
+    if hong:
+        _print("Khong xuat duoc: " + ", ".join(hong))
+        return 1
     return 0
 
 
