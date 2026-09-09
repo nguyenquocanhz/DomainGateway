@@ -603,8 +603,17 @@ def create_app(cfg: dict = None, store: Store = None) -> Flask:
         Bo loc nam o JavaScript; neu server loc lai thi phai viet lan thu hai
         bang Python va hai ban chac chan se lech nhau."""
         payload = request.get_json(silent=True) or {}
-        if not isinstance(payload.get("sections"), list):
-            return jsonify({"error": "Thiếu danh sách khu vực"}), 400
+        sections = payload.get("sections")
+        # Kiem tung phan tu chu khong chi kieu cua ca danh sach: registry_pdf()
+        # goi sec.get(...) va " ".join(...) tren noi dung ben trong, nen mot
+        # phan tu la chuoi hay mot tlds chua so se nem TypeError -> 500. Loi
+        # cua nguoi gui thi phai tra 400, dung 500.
+        if not isinstance(sections, list) or not all(
+            isinstance(s, dict)
+            and all(isinstance(x, str) for x in (s.get("tlds") or []))
+            for s in sections
+        ):
+            return jsonify({"error": "Thiếu danh sách khu vực, hoặc sai định dạng"}), 400
         try:
             data = exporters.registry_pdf(payload)
         except ImportError:

@@ -211,9 +211,33 @@ class Store:
         with conn:
             exists = conn.execute("SELECT 1 FROM domains WHERE domain = ?", (domain,)).fetchone()
             if exists:
+                # update_user_fields dung quy uoc "None = giu nguyen" (rieng
+                # auto_renew dung sentinel "__keep__" vi None la mot gia tri
+                # that: "khong ro"). add() phai DICH cac mac dinh cua minh
+                # sang quy uoc do.
+                #
+                # Truoc day chi dich provider va note; tags/pinned/auto_renew
+                # truyen thang [] / False / None nen deu la lenh GHI DE. Them
+                # lai mot ten mien da co - bam "Them vao kho quan ly" o tab Tra
+                # cuu nhanh, dan danh sach nhieu dong co lan ten da theo doi,
+                # hay chay `cli.py import` lan hai - la xoa sach tag, bo ghim,
+                # xoa auto_renew, khong mot dong canh bao.
+                #
+                # Mat ghim la nang nhat: _row_to_record chi cho manual_expires_at
+                # thang khi pinned bat, nen ngay het han nguoi dung co y nhap tay
+                # lang le ngung co tac dung trong khi cot do van con nguyen trong
+                # DB - nhin thang vao du lieu khong thay gi bat thuong.
+                #
+                # Muon XOA tag hay BO ghim thi dung PATCH /api/domains/<domain>,
+                # duong do gui gia tri tuong minh nen van lam duoc.
                 self.update_user_fields(
-                    domain, provider=provider or None, tags=tags, note=note or None,
-                    manual_expires_at=manual_expires_at, auto_renew=auto_renew, pinned=pinned,
+                    domain,
+                    provider=provider or None,
+                    tags=tags or None,
+                    note=note or None,
+                    manual_expires_at=manual_expires_at,
+                    auto_renew="__keep__" if auto_renew is None else auto_renew,
+                    pinned=pinned or None,
                 )
                 return
             conn.execute(
