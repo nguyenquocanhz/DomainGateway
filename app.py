@@ -20,7 +20,16 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from gateway import config as cfgmod
 from gateway import exporters
-from gateway.models import iso, utcnow
+from gateway.models import iso, lam_sach, utcnow
+
+# reportlab la phu thuoc TUY CHON (thieu no thi chi rieng xuat PDF bao loi),
+# nen khong import thang o dau file. LayoutError chi dung trong except nen
+# lop gia nay du: khi khong co reportlab thi khong bao gio co LayoutError.
+try:
+    from reportlab.platypus.doctemplate import LayoutError
+except ImportError:                                  # pragma: no cover
+    class LayoutError(Exception):
+        pass
 from gateway.notifier import TelegramNotifier, bucket_of, build_message
 from gateway.cloudflare import CloudflareClient, CloudflareError
 from gateway.resolver import normalize_domain
@@ -111,7 +120,16 @@ def _than_json() -> dict:
     truong bat buoc.
     """
     than = request.get_json(silent=True)
-    return than if isinstance(than, dict) else {}
+    if not isinstance(than, dict):
+        return {}
+    try:
+        # lam_sach truoc khi tra ve: mot surrogate lac hay ky tu dieu khien o
+        # bat ky truong nao cung lam sqlite/openpyxl nem loi o tang duoi.
+        return lam_sach(than)
+    except ValueError:
+        # Long qua sau. Tra dict rong -> handler tu bao thieu truong bat buoc,
+        # dung nhu truoc khi co lam_sach (400 chu khong phai 500).
+        return {}
 
 
 def _danh_ba_hop_le(sections: object) -> bool:
@@ -672,6 +690,14 @@ def create_app(cfg: dict = None, store: Store = None) -> Flask:
             data = exporters.to_pdf(store.all(), warn, crit)
         except ImportError:
             return jsonify({"error": "Thiếu thư viện reportlab. Chạy: pip install reportlab"}), 501
+        except LayoutError:
+            # Luoi do cuoi: ban cat theo be rong cot la uoc luong, con chieu cao
+            # that thi phu thuoc font va chu viet. Doan sai thi tra loi doc duoc
+            # chu khong phai trang 500 tran.
+            return jsonify({
+                "error": "Có ô dữ liệu quá dài để dàn vào trang PDF. "
+                         "Rút gọn ghi chú hoặc tên nhà cung cấp rồi thử lại."
+            }), 400
         return _attachment(data, "application/pdf", "pdf")
 
     @app.post("/api/registrars.pdf")
@@ -687,6 +713,10 @@ def create_app(cfg: dict = None, store: Store = None) -> Flask:
             data = exporters.registry_pdf(payload)
         except ImportError:
             return jsonify({"error": "Thiếu thư viện reportlab. Chạy: pip install reportlab"}), 501
+        except LayoutError:
+            return jsonify({
+                "error": "Có ô dữ liệu quá dài để dàn vào trang PDF."
+            }), 400
         name = "danh-ba-nha-dang-ky-" + utcnow().astimezone().strftime("%Y%m%d") + ".pdf"
         return Response(data, mimetype="application/pdf", headers={
             "Content-Disposition": 'attachment; filename="' + name + '"',

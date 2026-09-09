@@ -308,6 +308,8 @@ def _register_font():
 
 
 def to_pdf(records, warn: int = 45, crit: int = 14, title: str = None) -> bytes:
+    from xml.sax.saxutils import escape
+
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4, landscape
     from reportlab.lib.styles import ParagraphStyle
@@ -349,6 +351,21 @@ def to_pdf(records, warn: int = 45, crit: int = 14, title: str = None) -> bytes:
         Spacer(1, 5 * mm),
     ]
 
+    # Cung ly do nhu registry_pdf: o cao hon trang la LayoutError, ca ban xuat
+    # chet. `provider` do nguoi dung tu go nen dai bao nhieu cung duoc; registrar
+    # va nameserver den tu registry nhung van la du lieu ben thu ba.
+    # Cat TRUOC roi escape SAU. Lam nguoc lai thi nhat cat roi vao giua mot
+    # entity ("&amp;" -> "&am"). Va escape la bat buoc: Paragraph cua reportlab
+    # hieu markup giong HTML, nen mot dau "<" trong o Nha cung cap - truong
+    # nguoi dung tu go - lam ca ban xuat nem ValueError. ValueError do KHONG
+    # phai LayoutError nen luoi do o app.py khong bat duoc.
+    def cat(chu, rong_mm):
+        chu = str(chu or "")
+        gh = int(rong_mm * 28)
+        if len(chu) > gh:
+            chu = chu[:gh].rstrip() + "…"
+        return escape(chu)
+
     headers = ["Tên miền", "Trạng thái", "Còn lại", "Ngày hết hạn",
                "Nhà cung cấp", "Registrar", "Nameserver"]
     data = [[Paragraph(h, cell_head) for h in headers]]
@@ -356,13 +373,18 @@ def to_pdf(records, warn: int = 45, crit: int = 14, title: str = None) -> bytes:
         status = rec.status(warn, crit)
         colour = STATUS_COLOR[status]
         data.append([
-            Paragraph(rec.domain, cell),
+            Paragraph(cat(rec.domain, 46), cell),
             Paragraph(f'<font color="#{colour}">{STATUS_LABEL_VI[status]}</font>', cell),
             Paragraph(_days(rec), cell),
             Paragraph(_fmt(rec.expires_at), cell),
-            Paragraph(rec.provider or "—", cell),
-            Paragraph(rec.registrar or "—", cell),
-            Paragraph("<br/>".join(rec.nameservers) or "—", cell),
+            Paragraph(cat(rec.provider, 46) or "—", cell),
+            Paragraph(cat(rec.registrar, 46) or "—", cell),
+            # Cat va escape TUNG nameserver roi moi noi bang "<br/>" that:
+            # noi truoc thi nhat cat co the xe doi chinh the do ("<br" / "<br/").
+            # Gioi han 12 dong: mot ten mien co 40 nameserver van lam o cao hon
+            # trang du moi dong deu ngan.
+            Paragraph("<br/>".join(cat(ns, 2) for ns in rec.nameservers[:12])
+                      or "—", cell),
         ])
 
     table = Table(data, repeatRows=1, hAlign="LEFT",
@@ -425,8 +447,24 @@ def registry_pdf(payload: dict) -> bytes:
     now = datetime.now(timezone.utc).astimezone()
     total = sum(len(s.get("items") or []) for s in sections)
 
-    def par(text, style):
-        return Paragraph(escape(str(text if text is not None else "")), style)
+    # reportlab khong ngat mot o bang qua nhieu trang: o cao hon vung in la
+    # LayoutError, ca ban xuat chet. Gioi han phai theo BE RONG COT chu khong
+    # the dung mot con so chung - 1.200 ky tu vua trong cot 46mm nhung van tran
+    # trang o cot 28mm. Uoc luong ~20 ky tu moi mm be ngang la con nua trang
+    # chieu cao, du rong rai cho du lieu that (truong dai nhat trong
+    # registrars.json la 241 ky tu).
+    # Do that bang cach nhi phan tim nguong: A4 doc chua ~48 ky tu moi mm be
+    # ngang truoc khi o cao hon trang. Dat 38 cho co bien - con phai chua cho
+    # padding, hang tieu de lap lai, va chu rong gap doi (CJK, emoji) ma phep
+    # dem ky tu khong thay duoc.
+    def toi_da(rong_mm):
+        return int(rong_mm * 38)
+
+    def par(text, style, cat=0):
+        chu = str(text if text is not None else "")
+        if cat and len(chu) > cat:
+            chu = chu[:cat].rstrip() + "…"
+        return Paragraph(escape(chu), style)   # escape SAU khi cat
 
     # par() da tu str() moi thu, nhung vai cho ben duoi noi chuoi TRUOC khi
     # goi par() - va payload den tu trinh duyet nen mot truong sai kieu la
@@ -486,24 +524,27 @@ def registry_pdf(payload: dict) -> bytes:
             block.append(par(" · ".join(lines), meta))
         if sec.get("yeu_cau"):
             block.append(Spacer(1, 1.5 * mm))
-            block.append(par("Điều kiện đăng ký: " + str(sec["yeu_cau"]), note))
+            # Doan van tran ngang ca trang, khong nam trong o bang -> rong rai hon
+            block.append(par("Điều kiện đăng ký: " + str(sec["yeu_cau"]), note, 4000))
         if sec.get("canh_bao"):
-            block.append(par("Lưu ý: " + str(sec["canh_bao"]), note))
+            block.append(par("Lưu ý: " + str(sec["canh_bao"]), note, 4000))
         block.append(Spacer(1, 3 * mm))
         story.append(KeepTogether(block))
 
         rows = [[par(h, cell_head) for h in
                  ("Nhà đăng ký", "Quốc gia / Loại hình", "Trustee", "API", "Ghi chú")]]
         for item in sec.get("items") or []:
-            name = escape(str(item.get("ten") or ""))
-            url = escape(str(item.get("url") or ""))
+            # escape SAU khi cat, khong cat chuoi da escape (xe doi "&amp;")
+            name = escape(str(item.get("ten") or "")[:toi_da(46)])
+            url = escape(str(item.get("url") or "")[:toi_da(46)])
             rows.append([
                 Paragraph(f"<b>{name}</b>" + (f"<br/><font size=7 color='#6B7280'>{url}</font>"
                                               if url else ""), cell),
-                par(" · ".join(str(x) for x in (item.get("quoc_gia"), item.get("loai")) if x), cell),
+                par(" · ".join(str(x) for x in (item.get("quoc_gia"), item.get("loai")) if x),
+                    cell, toi_da(28)),
                 par("Có" if item.get("trustee") else "", cell),
-                par(item.get("api") or "", cell_sm),
-                par(item.get("ghi_chu") or "", cell_sm),
+                par(item.get("api") or "", cell_sm, toi_da(44)),
+                par(item.get("ghi_chu") or "", cell_sm, toi_da(46)),
             ])
 
         if len(rows) == 1:

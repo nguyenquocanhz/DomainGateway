@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
@@ -23,6 +24,49 @@ STATUS_LABEL = {
     STATUS_EXPIRED: "Expired",
     STATUS_UNKNOWN: "Unknown",
 }
+
+
+# Ky tu dieu khien khong hop le trong XML 1.0 (giu \t \n \r). openpyxl tu
+# choi chung bang IllegalCharacterError, con reportlab thi nuot im lang.
+_DIEU_KHIEN = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+
+# JSON long qua sau lam lam_sach de quy sap ngan xep. json.loads cua Python
+# 3.14 khong con tu chan do sau, va mot than 7 KB du de long 1.200 tang.
+SAU_TOI_DA = 80
+
+
+def lam_sach(gia_tri, _sau: int = 0):
+    """Bo surrogate lac va ky tu dieu khien khoi moi chuoi trong cau truc JSON.
+
+    `json.loads` cua Python NHAN escape `\\ud800` va tra ve mot str chua nua
+    cap surrogate. Khong dinh gi cho toi luc encode: sqlite tu choi binding,
+    jsonify (ensure_ascii=False) tu choi tra loi, csv/markdown tu choi ghi.
+    Loi nem ra o tan tang duoi cung, thanh 500 - hoac te hon, thoat han ra
+    ngoai khi dang xuat file va lam hong ca luot xuat.
+
+    Ky tu dieu khien di lot phep thu encode - chung la UTF-8 hop le - nhung
+    openpyxl tu choi ghi chung, nen mot ky tu nhu vay trong ghi chu lam MOI
+    lan xuat XLSX ve sau deu hong. Cung co che voi surrogate: vao im lang, no
+    o tang xuat. Nen don chung o cung mot cua.
+
+    Don ngay tai cua vao thi moi tang duoi khoi phai biet toi chuyen nay.
+    Nem ValueError khi long qua sau; nguoi goi doi thanh 400.
+    """
+    if _sau > SAU_TOI_DA:
+        raise ValueError("Dữ liệu JSON lồng quá sâu")
+    if isinstance(gia_tri, str):
+        # Duong tat: chuoi sach (tuyet dai da so) chi ton mot phep quet
+        try:
+            gia_tri.encode("utf-8")
+        except UnicodeEncodeError:
+            gia_tri = gia_tri.encode("utf-8", "replace").decode("utf-8")
+        return _DIEU_KHIEN.sub("", gia_tri)
+    if isinstance(gia_tri, dict):
+        return {lam_sach(k, _sau + 1): lam_sach(v, _sau + 1)
+                for k, v in gia_tri.items()}
+    if isinstance(gia_tri, list):
+        return [lam_sach(x, _sau + 1) for x in gia_tri]
+    return gia_tri
 
 
 def utcnow() -> datetime:

@@ -31,7 +31,7 @@ for _stream in (sys.stdout, sys.stderr):
         pass
 
 from gateway import config as cfgmod
-from gateway.models import STATUS_LABEL, iso, utcnow
+from gateway.models import STATUS_LABEL, iso, lam_sach, utcnow
 from gateway.notifier import TelegramNotifier, bucket_of, build_message
 from gateway.resolver import normalize_domain
 from gateway.store import Store
@@ -66,6 +66,13 @@ def cmd_import(args, store: Store, cfg: dict) -> int:
         raw = json.load(fh) if args.file.endswith(".json") else [
             {"domain": line.strip()} for line in fh if line.strip() and not line.startswith("#")
         ]
+    # Cung ly do nhu than JSON cua HTTP: json.load nhan escape \ud800, sqlite
+    # thi khong. File nay do nguoi dung tu soan nen van la du lieu ben ngoai.
+    try:
+        raw = lam_sach(raw)
+    except ValueError as e:
+        _print(f"File {args.file} khong dung dinh dang: {e}")
+        return 1
     if isinstance(raw, dict):
         raw = raw.get("domains", [])
     count = 0
