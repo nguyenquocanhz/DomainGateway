@@ -412,14 +412,13 @@ docker pull ghcr.io/nguyenquocanhz/domaingateway:latest && docker rm -f domain-g
 
 rồi chạy lại lệnh `docker run` ở trên. Dữ liệu nằm trong volume `dg-data`, không mất.
 
-> **Lần đẩy đầu tiên tạo package ở chế độ private** — GHCR không kế thừa visibility của
-> repo. Sau khi CI chạy xong lần đầu: *Profile → Packages → chọn package → Package
-> settings → Change visibility → Public*. Chưa làm bước đó thì lệnh trên báo `denied`.
->
 > Image dựng cho `linux/amd64` và `linux/arm64` — chạy được cả VPS x86 lẫn Ampere,
-> Graviton hay Raspberry Pi. Mỗi lần đẩy lên `main`, CI dựng image, **chạy thật container
-> rồi gọi `/api/summary`**, hỏng thì không đẩy lên registry — xem
-> [`.github/workflows/docker.yml`](.github/workflows/docker.yml).
+> Graviton hay Raspberry Pi. Kéo được ẩn danh, không cần `docker login`.
+>
+> Mỗi lần đẩy lên `main`, CI dựng image, **chạy thật container rồi gọi `/api/summary`**
+> và kiểm trang chủ render được; hỏng thì không đẩy lên registry — xem
+> [`.github/workflows/docker.yml`](.github/workflows/docker.yml). Lần chạy đầu: container
+> trả lời sau 2 giây.
 
 ### Tự dựng từ mã nguồn
 
