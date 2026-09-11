@@ -207,6 +207,16 @@ class DomainRecord:
     cf_paused: bool = False      # zone bat nhung chu so huu da tam dung
     cf_checked_at: datetime | None = None
 
+    # ---- doi chieu voi WHMCS -------------------------------------------------
+    # Nhom thu ba, cung nguyen tac: WHMCS la so sach cua nguoi ban, registry la
+    # su that. Luu rieng de doi chieu, khong ben nao ghi de len ben nao (xem
+    # WHMCS_FIELDS trong store.py).
+    whmcs_expiry: datetime | None = None
+    whmcs_nextdue: datetime | None = None
+    whmcs_status: str = ""           # Active | Expired | Transferred Away... | "" neu khong co
+    whmcs_registrar: str = ""
+    whmcs_checked_at: datetime | None = None
+
     # ---- thuoc tinh dan xuat -------------------------------------------------
     @property
     def days_left(self) -> int | None:
@@ -249,15 +259,54 @@ class DomainRecord:
         return "ok" if self.cf_records else "khong-ban-ghi"
 
     @property
+    def whmcs_lech_ngay(self) -> int | None:
+        """Ngay het han registry tru WHMCS. Am: registry het han SOM hon WHMCS nghi."""
+        if not self.whmcs_expiry or not self.expires_at:
+            return None
+        return (self.expires_at.date() - self.whmcs_expiry.date()).days
+
+    @property
+    def whmcs_ket_luan(self) -> str:
+        """Ket luan doi chieu WHMCS voi registry. "" = chua dong bo bao gio.
+
+        Theo muc do dang lo:
+          het-ma-active  WHMCS con de Active nhung registry da het han
+          hoa-don-tre    hoa don gia han den SAU ngay het han that - ten mien het
+                         truoc khi khach kip bi thu tien
+          lech           hai ngay het han lech nhau qua 1 ngay
+          chua-ro        mot ben chua co ngay het han
+          khong-thay     da dong bo, ten mien khong co trong WHMCS
+          khop           lech trong vong 1 ngay - WHMCS luu NGAY khong kem gio,
+                         registry luu gio UTC, nen lech mot ngay la mui gio
+        """
+        if not self.whmcs_checked_at:
+            return ""
+        if not self.whmcs_status:
+            return "khong-thay"
+        dang_active = self.whmcs_status.lower() == "active"
+        con = self.days_left
+        if dang_active and con is not None and con < 0:
+            return "het-ma-active"
+        if (dang_active and self.whmcs_nextdue and self.expires_at
+                and self.whmcs_nextdue.date() > self.expires_at.date()):
+            return "hoa-don-tre"
+        lech = self.whmcs_lech_ngay
+        if lech is None:
+            return "chua-ro"
+        return "khop" if abs(lech) <= 1 else "lech"
+
+    @property
     def locked(self) -> bool:
         return any("transferprohibited" in s.lower().replace(" ", "") for s in self.epp_status)
 
     def to_dict(self, warn: int = DEFAULT_WARN_DAYS, critical: int = DEFAULT_CRITICAL_DAYS) -> dict:
         data = dataclasses.asdict(self)
         for key in ("created_at", "updated_at", "expires_at", "checked_at",
-                    "cf_checked_at"):
+                    "cf_checked_at", "whmcs_expiry", "whmcs_nextdue", "whmcs_checked_at"):
             data[key] = iso(getattr(self, key))
         data["cf_ket_luan"] = self.cf_ket_luan
+        data["whmcs_ket_luan"] = self.whmcs_ket_luan
+        data["whmcs_lech_ngay"] = self.whmcs_lech_ngay
         data["days_left"] = self.days_left
         data["status"] = self.status(warn, critical)
         data["status_label"] = STATUS_LABEL[data["status"]]
@@ -269,7 +318,7 @@ class DomainRecord:
         known = {f.name for f in dataclasses.fields(cls)}
         clean = {k: v for k, v in data.items() if k in known}
         for key in ("created_at", "updated_at", "expires_at", "checked_at",
-                    "cf_checked_at"):
+                    "cf_checked_at", "whmcs_expiry", "whmcs_nextdue", "whmcs_checked_at"):
             if key in clean:
                 clean[key] = parse_dt(clean[key])
         for key in ("nameservers", "epp_status", "tags"):

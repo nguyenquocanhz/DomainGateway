@@ -21,6 +21,12 @@
   "_cloudflare": "Token doc-chi tu dash.cloudflare.com/profile/api-tokens. Chi can Zone:Read + Zone.DNS:Read, khong can quyen ghi nao.",
   "cloudflare_api_token": "",
 
+  "_whmcs": "Tuỳ chọn. Đối chiếu ngày hết hạn trong WHMCS với registry, chỉ đọc. API credential cần quyền API Access; thêm IP máy này ở Setup > General Settings > Security, hoặc điền accesskey.",
+  "whmcs_url": "",
+  "whmcs_identifier": "",
+  "whmcs_secret": "",
+  "whmcs_accesskey": "",
+
   "notify": {
     "telegram_bot_token": "",
     "telegram_chat_id": "",

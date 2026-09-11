@@ -215,6 +215,8 @@
     const coCf = state.domains.some((d) => d.cf_ket_luan);
     const bang = $("#domainTable");
     if (bang) bang.classList.toggle("co-site", coCf);
+    const coWhmcs = state.domains.some((d) => d.whmcs_ket_luan);
+    if (bang) bang.classList.toggle("co-whmcs", coWhmcs);
 
     const { key, dir } = state.sort;
     rows.sort((a, b) => {
@@ -230,6 +232,10 @@
         const uu = (v) => CF_THU_TU[v] ?? (!v ? 9 : v.startsWith("zone-") ? 2.5 : 5);
         x = uu(a.cf_ket_luan); y = uu(b.cf_ket_luan);
       }
+      if (key === "whmcs_ket_luan") {
+        const uu = (v) => WHMCS_THU_TU[v] ?? 9;
+        x = uu(a.whmcs_ket_luan); y = uu(b.whmcs_ket_luan);
+      }
       if (typeof x === "string") return x.localeCompare(y, "vi") * dir;
       return ((x > y) - (x < y)) * dir;
     });
@@ -244,6 +250,25 @@
     // Ô bảng hẹp nên hiện chữ ngắn; chữ đầy đủ để trong title, vì "Website tắt"
     // mà không nói vì sao thì người đọc phải đi tra chỗ khác.
     return `<span class="site-badge" data-muc="${esc(muc)}" title="${esc(chu)}">${esc(ngan || chu)}</span>`;
+  }
+
+  /** Ô "WHMCS" — rỗng khi chưa đồng bộ WHMCS bao giờ. */
+  function whmcsBadge(r) {
+    const n = WHMCS_NHAN[r.whmcs_ket_luan];
+    if (!n) return '<span class="dash">—</span>';
+    let [muc, chu, ngan] = n;
+    if (r.whmcs_ket_luan === "lech" && r.whmcs_lech_ngay != null) {
+      const d = r.whmcs_lech_ngay;
+      ngan = `Lệch ${Math.abs(d)} ngày`;
+      // Âm: registry hết hạn SỚM hơn WHMCS nghĩ — tên miền có thể mất trong
+      // khi WHMCS vẫn báo ổn. Dương: WHMCS chưa cập nhật lần gia hạn, ít nguy.
+      muc = d < 0 ? "err" : "warn";
+      chu = d < 0
+        ? `Registry hết hạn sớm hơn WHMCS ${Math.abs(d)} ngày`
+        : `Registry hết hạn muộn hơn WHMCS ${d} ngày — WHMCS chưa cập nhật`;
+    }
+    const tip = r.whmcs_expiry ? `${chu} · WHMCS ghi: ${fmtDate(r.whmcs_expiry)}` : chu;
+    return `<span class="site-badge" data-muc="${esc(muc)}" title="${esc(tip)}">${esc(ngan || chu)}</span>`;
   }
 
   function rowHtml(r) {
@@ -266,6 +291,7 @@
       </td>
       <td data-label="Trạng thái"><span class="status" data-s="${r.status}">${statusIcon(r.status)}${STATUS_TEXT[r.status]}</span></td>
       <td class="col-site" data-label="Site">${siteBadge(r)}</td>
+      <td class="col-whmcs" data-label="WHMCS">${whmcsBadge(r)}</td>
       <td data-label="Còn lại">
         <div class="runway">
           <div class="runway-track"><div class="runway-fill" data-s="${r.status}" style="width:${pct}%"></div></div>
@@ -318,6 +344,7 @@
             ? `<span class="pill">${esc(provider)}</span>`
             : `<span class="pill is-empty" data-act="setprovider">+ đặt tên</span>`}</dd></div>
         ${r.cf_ket_luan ? `<div><dt>Site</dt><dd>${siteBadge(r)}</dd></div>` : ""}
+        ${r.whmcs_ket_luan ? `<div><dt>WHMCS</dt><dd>${whmcsBadge(r)}</dd></div>` : ""}
         <div><dt>Nameserver</dt>
           <dd class="mono">${ns.length
             ? esc(ns[0]) + (ns.length > 1 ? ` <span class="dash">+${ns.length - 1}</span>` : "")
@@ -1117,6 +1144,20 @@
     "khong-thay": 3, "ok": 4,
   };
 
+  // Đối chiếu WHMCS với registry. [mức, chữ đầy đủ, chữ ngắn]. "info" không
+  // tô màu: tên miền của chính mình không có trong WHMCS là chuyện bình thường.
+  const WHMCS_NHAN = {
+    "het-ma-active": ["err", "WHMCS để Active nhưng registry đã hết hạn", "Hết hạn · WHMCS Active"],
+    "hoa-don-tre": ["err", "Hoá đơn gia hạn đến sau ngày hết hạn thật — tên miền hết trước khi khách bị thu tiền", "Hoá đơn trễ"],
+    "lech": ["warn", "Ngày hết hạn trong WHMCS lệch với registry", "Lệch"],
+    "chua-ro": ["warn", "Một bên chưa có ngày hết hạn", "Chưa rõ"],
+    "khong-thay": ["info", "Không có trong WHMCS", "Ngoài WHMCS"],
+    "khop": ["ok", "Khớp với registry", "Khớp"],
+  };
+  const WHMCS_THU_TU = {
+    "het-ma-active": 0, "hoa-don-tre": 1, "lech": 2, "chua-ro": 3, "khong-thay": 4, "khop": 5,
+  };
+
   function cfNhan(ketLuan) {
     if (!ketLuan) return null;
     if (CF_NHAN[ketLuan]) return CF_NHAN[ketLuan];
@@ -1136,6 +1177,23 @@
     hop.innerHTML = `<ul class="cf-tong">${dong}</ul>` + (
       (r.canh_bao || []).length
         ? `<p class="cf-canh-bao">${ICON.warn} Còn hạn nhưng không phục vụ gì: ` +
+          `<strong>${r.canh_bao.map(esc).join(", ")}</strong></p>`
+        : "");
+    hop.hidden = false;
+  }
+
+  function veKetQuaWhmcs(r) {
+    const hop = $("#whmcsResult");
+    const dong = Object.entries(r.theo_ket_luan || {})
+      .filter(([k]) => k && WHMCS_NHAN[k])
+      .sort((a, b) => (WHMCS_THU_TU[a[0]] ?? 9) - (WHMCS_THU_TU[b[0]] ?? 9))
+      .map(([k, n]) => {
+        const [muc, chu] = WHMCS_NHAN[k];
+        return `<li data-muc="${esc(muc)}"><strong>${n}</strong> ${esc(chu)}</li>`;
+      }).join("");
+    hop.innerHTML = `<ul class="cf-tong">${dong}</ul>` + (
+      (r.canh_bao || []).length
+        ? `<p class="cf-canh-bao">${ICON.warn} Cần xem ngay: ` +
           `<strong>${r.canh_bao.map(esc).join(", ")}</strong></p>`
         : "");
     hop.hidden = false;
@@ -1180,6 +1238,21 @@
       cfB.dataset.state = s.cloudflare_token_set ? "on" : "off";
       cfB.textContent = s.cloudflare_token_set
         ? (s.last_cf_sync ? "Đồng bộ " + relTime(s.last_cf_sync) : "Đã có token")
+        : "Chưa kết nối";
+
+      $("#whmcsUrl").value = s.whmcs_url || "";
+      for (const id of ["#whmcsId", "#whmcsSecret", "#whmcsKey"]) $(id).value = "";
+      const giuNguyen = "Để trống nếu không đổi";
+      $("#whmcsId").placeholder = s.whmcs_configured ? giuNguyen : "";
+      $("#whmcsSecret").placeholder = s.whmcs_configured ? giuNguyen : "";
+      $("#whmcsKey").placeholder = s.whmcs_accesskey_set ? giuNguyen : "";
+      $("#whmcsHint").textContent = s.whmcs_configured
+        ? "Identifier và secret đang lưu — không hiện ra ở đây. Để trống nếu không muốn đổi."
+        : "Chưa cấu hình. Làm theo 3 bước ở trên.";
+      const wB = $("#whmcsBadge");
+      wB.dataset.state = s.whmcs_configured ? "on" : "off";
+      wB.textContent = s.whmcs_configured
+        ? (s.last_whmcs_sync ? "Đồng bộ " + relTime(s.last_whmcs_sync) : "Đã cấu hình")
         : "Chưa kết nối";
     } catch (e) {
       toast("Không tải được cài đặt: " + e.message, "err");
@@ -1315,6 +1388,49 @@
       } finally {
         btn.disabled = false;
         btn.textContent = "Gửi tin nhắn thử";
+      }
+    });
+
+    $("#btnSaveWhmcs").addEventListener("click", async () => {
+      const body = { whmcs_url: $("#whmcsUrl").value.trim() };
+      const id = $("#whmcsId").value.trim();
+      const sec = $("#whmcsSecret").value.trim();
+      const key = $("#whmcsKey").value.trim();
+      if (id) body.whmcs_identifier = id;
+      if (sec) body.whmcs_secret = sec;
+      if (key) body.whmcs_accesskey = key;
+      const s = await saveSettings(body, "Đã lưu cấu hình WHMCS.");
+      if (s) renderSettings();
+    });
+
+    $("#btnVerifyWhmcs").addEventListener("click", async (e) => {
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      try {
+        const r = await api("/api/whmcs/verify", { method: "POST", body: {} });
+        toast(`Kết nối được. WHMCS có ${r.tong ?? "?"} tên miền.`, "ok");
+      } catch (err) {
+        toast("Lỗi: " + err.message, "err");
+      } finally { btn.disabled = false; }
+    });
+
+    $("#btnSyncWhmcs").addEventListener("click", async (e) => {
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      btn.textContent = "Đang đọc...";
+      try {
+        const r = await api("/api/whmcs/sync", { method: "POST", body: {} });
+        veKetQuaWhmcs(r);
+        let msg = `Đọc ${r.tong_whmcs} tên miền từ WHMCS, thêm mới ${r.moi_them}.`;
+        if (r.moi_them && !r.dang_tra_cuu) msg += " Đang có lượt tra cứu khác — bấm Tra cứu lại sau.";
+        toast(msg, "ok");
+        await load();
+        renderSettings();
+      } catch (err) {
+        toast("Lỗi: " + err.message, "err");
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Đồng bộ ngay";
       }
     });
 

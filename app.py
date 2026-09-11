@@ -33,6 +33,7 @@ except ImportError:                                  # pragma: no cover
 from gateway.notifier import (MultiNotifier, ZaloNotifier, bucket_of, build_message,
                               tu_cau_hinh)
 from gateway.cloudflare import CloudflareClient, CloudflareError
+from gateway.whmcs import WhmcsClient, WhmcsError, chuan_hoa_url
 from gateway.resolver import normalize_domain
 from gateway.store import Store
 
@@ -543,6 +544,12 @@ def create_app(cfg: dict = None, store: Store = None) -> Flask:
             # nen khong he lo ky tu nao ca - bai hoc tu cach che token Telegram.
             "cloudflare_token_set": bool(cfg.get("cloudflare_api_token")),
             "last_cf_sync": store.get_meta("last_cf_sync"),
+            # identifier / secret / accesskey KHONG bao gio tra ve, ke ca che mot
+            # phan: chung la chuoi ngau nhien, lo mot nua cung chang de nhan ra gi.
+            "whmcs_url": cfg.get("whmcs_url", ""),
+            "whmcs_configured": whmcs_client().configured,
+            "whmcs_accesskey_set": bool(cfg.get("whmcs_accesskey")),
+            "last_whmcs_sync": store.get_meta("last_whmcs_sync"),
             "last_notify": store.get_meta("last_notify"),
             "cron_command": (
                 'schtasks /create /tn "DomainGateway" /tr '
@@ -586,6 +593,21 @@ def create_app(cfg: dict = None, store: Store = None) -> Flask:
         cf_token = (_van_ban(payload.get("cloudflare_api_token"), "") or "").strip()
         if cf_token:
             changes["cloudflare_api_token"] = cf_token
+
+        # WHMCS: kiem URL ngay luc luu, de loi "phai https" hien o day chu khong
+        # phai moi lan bam dong bo. Truong bi mat rong la giu nguyen, giong token.
+        if "whmcs_url" in payload:
+            url = (_van_ban(payload["whmcs_url"], "") or "").strip()
+            if url:
+                try:
+                    chuan_hoa_url(url)
+                except WhmcsError as exc:
+                    return jsonify({"error": str(exc)}), 400
+            changes["whmcs_url"] = url
+        for key in ("whmcs_identifier", "whmcs_secret", "whmcs_accesskey"):
+            gia_tri = (_van_ban(payload.get(key), "") or "").strip()
+            if gia_tri:
+                changes[key] = gia_tri
 
         if not changes:
             return jsonify({"error": "Không có gì để lưu"}), 400
@@ -652,6 +674,65 @@ def create_app(cfg: dict = None, store: Store = None) -> Flask:
             "tong": len(ten_mien),
             "theo_ket_luan": dem,
             "canh_bao": [r.domain for r in recs if r.cf_ket_luan == "khong-ban-ghi"],
+        })
+
+    # ---- WHMCS ------------------------------------------------------------
+    def whmcs_client() -> WhmcsClient:
+        return WhmcsClient(cfg.get("whmcs_url", ""), cfg.get("whmcs_identifier", ""),
+                           cfg.get("whmcs_secret", ""), cfg.get("whmcs_accesskey", ""))
+
+    @app.post("/api/whmcs/verify")
+    def api_whmcs_verify():
+        wc = whmcs_client()
+        if not wc.configured:
+            return jsonify({"error": "Chưa cấu hình đủ URL, identifier và secret của WHMCS"}), 400
+        try:
+            return jsonify(wc.verify())
+        except WhmcsError as exc:
+            return jsonify({"error": str(exc)}), 400
+
+    @app.post("/api/whmcs/sync")
+    def api_whmcs_sync():
+        """Nhap ten mien tu WHMCS va ghi so sach cua no de doi chieu. CHI DOC WHMCS.
+
+        Ten mien moi duoc them vao kho kem tag "whmcs" roi tra cuu registry. Ten
+        mien da co thi KHONG dung toi tag / nha cung cap / ghi chu cua nguoi dung
+        - chi ghi nhom cot whmcs_*. Goi add() cho ten da co la ghi de tag cua no.
+        """
+        wc = whmcs_client()
+        if not wc.configured:
+            return jsonify({"error": "Chưa cấu hình đủ URL, identifier và secret của WHMCS"}), 400
+        try:
+            ds = wc.tat_ca()
+        except WhmcsError as exc:
+            return jsonify({"error": str(exc)}), 400
+
+        co_san = set(store.names())
+        theo_ten = {m["domain"]: m for m in ds}
+        moi = sorted(d for d in theo_ten if d not in co_san)
+        for d in moi:
+            store.add(d, tags=["whmcs"])
+        for d, m in theo_ten.items():
+            store.save_whmcs(d, m)
+        # Co trong kho ma khong co trong WHMCS: van ghi "da dong bo, khong thay"
+        for d in co_san - set(theo_ten):
+            store.save_whmcs(d, {})
+        store.set_meta("last_whmcs_sync", iso(utcnow()))
+
+        # Ten moi chua co du lieu registry thi chua doi chieu duoc gi
+        dang_tra_cuu = _spawn_refresh(moi) if moi else False
+        recs = store.all()
+        dem = {}
+        for r in recs:
+            dem[r.whmcs_ket_luan] = dem.get(r.whmcs_ket_luan, 0) + 1
+        return jsonify({
+            "ok": True,
+            "tong_whmcs": len(theo_ten),
+            "moi_them": len(moi),
+            "dang_tra_cuu": bool(dang_tra_cuu),
+            "theo_ket_luan": dem,
+            "canh_bao": [r.domain for r in recs
+                         if r.whmcs_ket_luan in ("het-ma-active", "hoa-don-tre")],
         })
 
     @app.post("/api/notify/test")

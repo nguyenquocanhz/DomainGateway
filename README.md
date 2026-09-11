@@ -391,6 +391,50 @@ token Cloudflare là chuỗi đối không có phần công khai nào để khoe
 
 ---
 
+## Đối chiếu với WHMCS
+
+Dành cho ai bán tên miền / hosting qua WHMCS. WHMCS đã lưu sẵn ngày hết hạn cho mọi tên miền
+khách mua — nên chỉ nhập về thì chẳng thêm được gì. Domain Gateway đọc **registry** độc lập rồi
+**so hai ngày**:
+
+![Cột WHMCS trong bảng](docs/img/doi-chieu-whmcs.png)
+
+| Kết luận | Nghĩa là |
+|---|---|
+| **`het-ma-active`** | **WHMCS để Active nhưng registry đã hết hạn** |
+| **`hoa-don-tre`** | **Hoá đơn gia hạn đến sau ngày hết hạn thật — tên miền hết trước khi khách bị thu tiền** |
+| `lech` | Hai ngày hết hạn lệch quá 1 ngày. Registry sớm hơn thì tô đỏ, muộn hơn (WHMCS chưa cập nhật lần gia hạn) thì tô vàng |
+| `chua-ro` | Một bên chưa có ngày hết hạn |
+| `khong-thay` | Tên miền có trong kho nhưng không có trong WHMCS |
+| `khop` | Lệch trong vòng 1 ngày — WHMCS lưu ngày không kèm giờ, registry lưu giờ UTC |
+
+**Chỉ đọc.** Chỉ gọi `GetClientsDomains`, không ghi gì vào WHMCS. Tên miền mới được thêm vào kho
+kèm tag `whmcs` rồi tra cứu registry; tên miền đã có thì giữ nguyên tag, nhà cung cấp và ghi chú
+của bạn — sổ sách WHMCS nằm ở một nhóm cột riêng. Một tên miền có nhiều dòng trong WHMCS (dòng cũ
+đã huỷ + dòng mới) thì lấy dòng *Active*.
+
+Cấu hình trong thẻ **Đối chiếu với WHMCS** của trang Cài đặt, hoặc `config.json`:
+
+```json
+"whmcs_url": "https://billing.example.com",
+"whmcs_identifier": "...",
+"whmcs_secret": "...",
+"whmcs_accesskey": ""
+```
+
+Ba chỗ hay vấp:
+
+- **API của WHMCS mặc định chặn theo IP.** Thêm IP máy chạy Domain Gateway ở *Setup → General
+  Settings → Security*, hoặc điền `whmcs_accesskey`. Không làm thì nhận lỗi `Invalid IP`.
+- **URL phải là https** — secret đi trong nội dung request. Điền gốc WHMCS
+  (`https://billing.example.com` hoặc `https://example.com/whmcs`), app tự nối `/includes/api.php`.
+- **Nhiều tên miền thì lần tra cứu đầu lâu.** RDAP không giới hạn, nhưng tên miền `.vn` đi qua
+  BKNS mà key demo chỉ cho 2 request/phút — 600 tên miền `.vn` mất khoảng 5 tiếng.
+
+![Thẻ cài đặt WHMCS](docs/img/cai-dat-whmcs.png)
+
+---
+
 ## Deploy bằng Docker
 
 ### Cách nhanh nhất: image dựng sẵn
@@ -607,7 +651,8 @@ Kiểm tra: `schtasks /query /tn "DomainGateway"` · Xoá: `schtasks /delete /tn
 | `port` | 8787 | Cổng web |
 
 Biến môi trường ghi đè file: `DG_BKNS_KEY`, `DG_CF_TOKEN`, `DG_WARN_DAYS`, `DG_CRITICAL_DAYS`,
-`DG_PORT`, `DG_HOST`, `DG_TELEGRAM_TOKEN`, `DG_TELEGRAM_CHAT`, `DG_ZALO_TOKEN`, `DG_ZALO_CHAT`.
+`DG_PORT`, `DG_HOST`, `DG_TELEGRAM_TOKEN`, `DG_TELEGRAM_CHAT`, `DG_ZALO_TOKEN`, `DG_ZALO_CHAT`, `DG_WHMCS_URL`, `DG_WHMCS_ID`, `DG_WHMCS_SECRET`,
+`DG_WHMCS_ACCESSKEY`.
 
 `DG_CONFIG` đổi chỗ đặt `config.json` — mặc định nằm cạnh mã nguồn, trong Docker trỏ vào
 `/app/data/config.json` để token còn nguyên sau khi dựng lại image.
@@ -716,6 +761,7 @@ domain_gateway/
 │   ├── resolver.py         RDAP + BKNS + WHOIS:43 + rate limit + fallback
 │   ├── notifier.py         Telegram: dựng tin nhắn HTML, gửi, chia nhỏ khi quá dài
 │   ├── cloudflare.py       Đọc trạng thái zone (chỉ GET, chỉ quyền đọc)
+│   ├── whmcs.py            Đọc sổ sách WHMCS để đối chiếu hạn (chỉ đọc)
 │   ├── store.py            SQLite: kho tên miền, lịch sử, chống trùng cảnh báo
 │   └── config.py           Đọc/ghi config.json + biến môi trường
 ├── templates/index.html

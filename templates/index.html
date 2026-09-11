@@ -192,6 +192,8 @@
                    "Đang hoạt động | Website tắt" chính là thứ đáng thấy nhất.
                    Cột tự ẩn khi chưa đồng bộ Cloudflare lần nào. -->
               <th class="sortable col-site" data-sort="cf_ket_luan">Site <span class="sort-ico"></span></th>
+              <!-- Tu an khi chua dong bo WHMCS lan nao -->
+              <th class="sortable col-whmcs" data-sort="whmcs_ket_luan">WHMCS <span class="sort-ico"></span></th>
               <th class="sortable" data-sort="days_left">Còn lại <span class="sort-ico"></span></th>
               <th class="sortable" data-sort="expires_at">Ngày hết hạn <span class="sort-ico"></span></th>
               <th class="sortable" data-sort="provider">Nhà cung cấp <span class="sort-ico"></span></th>
@@ -353,6 +355,48 @@
             <button class="btn" id="btnSyncCf" type="button">Đồng bộ ngay</button>
           </div>
           <div id="cfResult" class="cf-result" hidden></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <h2>Đối chiếu với WHMCS</h2>
+            <span class="conn-badge" id="whmcsBadge" data-state="off">Chưa kết nối</span>
+          </div>
+          <p class="muted">WHMCS đã lưu ngày hết hạn cho mọi tên miền khách mua. Domain Gateway đọc
+            registry độc lập rồi so hai ngày — lệch nhau là dấu hiệu đồng bộ với nhà đăng ký hỏng,
+            hoặc tên miền đã chuyển đi mà WHMCS vẫn để <em>Active</em>. Chỉ đọc, không ghi gì vào WHMCS.</p>
+          <ol class="steps">
+            <li>Tạo một API credential (identifier + secret) trong WHMCS cho admin role có quyền
+                <code>API Access</code>.</li>
+            <li>API của WHMCS mặc định chặn theo IP: thêm IP máy chạy Domain Gateway ở
+                <em>Setup → General Settings → Security</em>, hoặc dùng access key.</li>
+            <li>Điền vào đây, <em>Kiểm tra</em>, rồi <em>Đồng bộ ngay</em>.</li>
+          </ol>
+          <label class="field">
+            <span>URL WHMCS</span>
+            <input id="whmcsUrl" type="url" autocomplete="off" placeholder="https://billing.example.com">
+          </label>
+          <div class="field-row">
+            <label class="field">
+              <span>Identifier</span>
+              <input id="whmcsId" type="password" autocomplete="off">
+            </label>
+            <label class="field">
+              <span>Secret</span>
+              <input id="whmcsSecret" type="password" autocomplete="off">
+            </label>
+          </div>
+          <label class="field">
+            <span>Access key <em>(tuỳ chọn — thay cho allowlist IP)</em></span>
+            <input id="whmcsKey" type="password" autocomplete="off">
+          </label>
+          <p class="muted" id="whmcsHint"></p>
+          <div class="btn-row">
+            <button class="btn primary" id="btnSaveWhmcs" type="button">Lưu</button>
+            <button class="btn" id="btnVerifyWhmcs" type="button">Kiểm tra</button>
+            <button class="btn" id="btnSyncWhmcs" type="button">Đồng bộ ngay</button>
+          </div>
+          <div id="whmcsResult" class="cf-result" hidden></div>
         </div>
 
         <div class="panel">

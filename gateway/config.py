@@ -29,6 +29,10 @@ DEFAULTS = {
     "notify": {"telegram_bot_token": "", "telegram_chat_id": "",
                "zalo_bot_token": "", "zalo_chat_id": ""},
     "cloudflare_api_token": "",
+    "whmcs_url": "",
+    "whmcs_identifier": "",
+    "whmcs_secret": "",
+    "whmcs_accesskey": "",
 }
 
 
@@ -52,6 +56,10 @@ def load(path: str = None) -> dict:
         "DG_PORT": ("port", int),
         "DG_HOST": ("host", str),
         "DG_CF_TOKEN": ("cloudflare_api_token", str),
+        "DG_WHMCS_URL": ("whmcs_url", str),
+        "DG_WHMCS_ID": ("whmcs_identifier", str),
+        "DG_WHMCS_SECRET": ("whmcs_secret", str),
+        "DG_WHMCS_ACCESSKEY": ("whmcs_accesskey", str),
     }
     for env, (key, cast) in env_map.items():
         if os.environ.get(env):

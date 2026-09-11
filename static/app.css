@@ -1036,6 +1036,7 @@ body.sidebar-collapsed .theme-btn { justify-content: center; padding: 7px 0; }
 /* Ẩn cho tới khi thực sự có dữ liệu: app không dùng Cloudflare thì bảng
    giữ nguyên như cũ, không thừa một cột toàn dấu gạch ngang. */
 #domainTable:not(.co-site) .col-site { display: none; }
+#domainTable:not(.co-whmcs) .col-whmcs { display: none; }
 
 .site-badge {
   display: inline-block; padding: 2px 9px; border-radius: 20px;

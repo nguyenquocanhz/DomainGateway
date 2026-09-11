@@ -40,7 +40,12 @@ CREATE TABLE IF NOT EXISTS domains (
     cf_records        INTEGER,
     cf_proxied        INTEGER,
     cf_paused         INTEGER DEFAULT 0,
-    cf_checked_at     TEXT
+    cf_checked_at     TEXT,
+    whmcs_expiry      TEXT,
+    whmcs_nextdue     TEXT,
+    whmcs_status      TEXT DEFAULT '',
+    whmcs_registrar   TEXT DEFAULT '',
+    whmcs_checked_at  TEXT
 );
 
 CREATE TABLE IF NOT EXISTS history (
@@ -78,6 +83,12 @@ USER_FIELDS = ("provider", "tags", "note", "auto_renew", "manual_expires_at", "p
 # khong duoc cham vao du lieu registry. Hai nguon tra loi hai cau hoi khac
 # nhau, ghi de nhau la mat mot nua thong tin.
 CF_FIELDS = ("cf_status", "cf_records", "cf_proxied", "cf_paused", "cf_checked_at")
+
+# So sach WHMCS. Nhom thu ba, cung luat: save_lookup, save_cloudflare va truong
+# nguoi dung khong duoc cham vao day, save_whmcs khong duoc cham ra ngoai. Ghi
+# de nhau la mat chinh cai ta dang muon so sanh.
+WHMCS_FIELDS = ("whmcs_expiry", "whmcs_nextdue", "whmcs_status", "whmcs_registrar",
+                "whmcs_checked_at")
 
 
 def _dumps(value) -> str:
@@ -119,7 +130,11 @@ class Store:
         co = {r["name"] for r in conn.execute("PRAGMA table_info(domains)")}
         for ten, kieu in (("cf_status", "TEXT DEFAULT ''"), ("cf_records", "INTEGER"),
                           ("cf_proxied", "INTEGER"), ("cf_paused", "INTEGER DEFAULT 0"),
-                          ("cf_checked_at", "TEXT")):
+                          ("cf_checked_at", "TEXT"),
+                          ("whmcs_expiry", "TEXT"), ("whmcs_nextdue", "TEXT"),
+                          ("whmcs_status", "TEXT DEFAULT ''"),
+                          ("whmcs_registrar", "TEXT DEFAULT ''"),
+                          ("whmcs_checked_at", "TEXT")):
             if ten not in co:
                 conn.execute(f"ALTER TABLE domains ADD COLUMN {ten} {kieu}")
 
@@ -148,6 +163,26 @@ class Store:
                 ),
             )
 
+    def save_whmcs(self, domain: str, muc: dict) -> None:
+        """Ghi so sach WHMCS cua mot ten mien. CHI dung toi WHMCS_FIELDS.
+
+        `muc` rong = da dong bo nhung khong co trong WHMCS. Van ghi
+        whmcs_checked_at de phan biet voi "chua dong bo bao gio".
+        """
+        m = muc or {}
+        conn = self._conn()
+        with conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO domains (domain, added_at) VALUES (?, ?)",
+                (domain, iso(utcnow())),
+            )
+            conn.execute(
+                "UPDATE domains SET whmcs_expiry = ?, whmcs_nextdue = ?, whmcs_status = ?, "
+                "whmcs_registrar = ?, whmcs_checked_at = ? WHERE domain = ?",
+                (iso(m.get("expiry")), iso(m.get("nextdue")), m.get("status", "") or "",
+                 m.get("registrar", "") or "", iso(utcnow()), domain),
+            )
+
     # ---- doc ---------------------------------------------------------------
     def _row_to_record(self, row: sqlite3.Row) -> DomainRecord:
         rec = DomainRecord(
@@ -173,6 +208,11 @@ class Store:
             cf_proxied=row["cf_proxied"],
             cf_paused=bool(row["cf_paused"]),
             cf_checked_at=parse_dt(row["cf_checked_at"]),
+            whmcs_expiry=parse_dt(row["whmcs_expiry"]),
+            whmcs_nextdue=parse_dt(row["whmcs_nextdue"]),
+            whmcs_status=row["whmcs_status"] or "",
+            whmcs_registrar=row["whmcs_registrar"] or "",
+            whmcs_checked_at=parse_dt(row["whmcs_checked_at"]),
         )
         # Ngay het han nhap tay duoc uu tien khi pinned hoac khi registry im lang
         manual = parse_dt(row["manual_expires_at"])
