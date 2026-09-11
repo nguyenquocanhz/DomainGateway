@@ -271,7 +271,7 @@ class DomainRecord:
 
         Theo muc do dang lo:
           het-ma-active  WHMCS con de Active nhung registry da het han
-          hoa-don-tre    hoa don gia han den SAU ngay het han that - ten mien het
+          hoa-don-tre    hoa don gia han den SAU ngay het han that qua 1 ngay - ten mien het
                          truoc khi khach kip bi thu tien
           lech           hai ngay het han lech nhau qua 1 ngay
           chua-ro        mot ben chua co ngay het han
@@ -287,8 +287,12 @@ class DomainRecord:
         con = self.days_left
         if dang_active and con is not None and con < 0:
             return "het-ma-active"
+        # Cung dung sai 1 ngay nhu "khop": WHMCS o VN ghi ngay 16 cho ten mien
+        # registry het han 23:59Z ngay 15. So thang thi ~7/24 ten mien bi to do
+        # oan. Doi lai, hoa don tre DUNG 1 ngay khong con bat duoc - muon bat thi
+        # phai biet mui gio cua WHMCS.
         if (dang_active and self.whmcs_nextdue and self.expires_at
-                and self.whmcs_nextdue.date() > self.expires_at.date()):
+                and (self.whmcs_nextdue.date() - self.expires_at.date()).days > 1):
             return "hoa-don-tre"
         lech = self.whmcs_lech_ngay
         if lech is None:

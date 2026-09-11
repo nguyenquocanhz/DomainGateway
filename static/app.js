@@ -401,6 +401,9 @@
     const grid = state.layout === "grid";
     const body = $("#tableBody");
     const cards = $("#cardGrid");
+    // Đếm từ thead: đóng cứng "9" đã vỡ một lần khi thêm cột WHMCS. Cột đang ẩn
+    // vẫn tính — colspan dư thì trình duyệt tự xử lý, thiếu thì hụt một ô.
+    const soCot = document.querySelectorAll("#domainTable thead th").length;
 
     $(".table-wrap").hidden = grid;
     cards.hidden = !grid;
@@ -414,7 +417,7 @@
           <p>${state.domains.length ? "Thử đổi bộ lọc hoặc từ khoá tìm kiếm." : 'Bấm "Thêm tên miền" để bắt đầu.'}</p>
         </div>`;
       if (grid) cards.innerHTML = empty;
-      else body.innerHTML = `<tr><td colspan="9">${empty}</td></tr>`;
+      else body.innerHTML = `<tr><td colspan="${soCot}">${empty}</td></tr>`;
       $("#rowCount").textContent = "Hiển thị 0 tên miền";
       $("#groupHint").textContent = "";
       renderPager(0, 1);
@@ -442,7 +445,7 @@
         const head = `${esc(name)} <span class="count">— ${list.length} tên miền</span>`;
         return grid
           ? `<div class="grid-group">${head}</div>${list.map(cardHtml).join("")}`
-          : `<tr class="group-row"><td colspan="9">${head}</td></tr>${list.map(rowHtml).join("")}`;
+          : `<tr class="group-row"><td colspan="${soCot}">${head}</td></tr>${list.map(rowHtml).join("")}`;
       }).join("");
       $("#groupHint").textContent = `Gom theo ${sorted.length} nhà cung cấp`;
     } else {

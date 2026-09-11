@@ -46,9 +46,20 @@ def chuan_hoa_url(url: str) -> str:
     u = (url or "").strip()
     if not u:
         raise WhmcsError("Chưa cấu hình URL WHMCS")
-    p = urlparse(u)
+    try:
+        p = urlparse(u)
+        host, _ = p.hostname or "", p.port
+    except ValueError:
+        # urlparse nem ValueError voi "[" thieu "]", IPv6 sai, ky tu doi nghia sau
+        # chuan hoa NFKC; .port nem khi cong khong phai so. De lot ra la 500.
+        raise WhmcsError("URL WHMCS không hợp lệ") from None
     if p.scheme != "https" or not p.netloc:
         raise WhmcsError("URL WHMCS phải bắt đầu bằng https:// — secret đi trong nội dung request")
+    # "billing..vd.com" hay nhan dai qua 63 ky tu van qua urlparse, toi luc goi
+    # moi no. Chan ngay luc luu de nguoi dung biet sai o dau.
+    nhan = (host[:-1] if host.endswith(".") else host).split(".")
+    if not host or any(not 1 <= len(n) <= 63 for n in nhan):
+        raise WhmcsError("Tên máy chủ trong URL WHMCS không hợp lệ")
     duong = p.path.rstrip("/")
     if not duong.endswith("/includes/api.php"):
         duong += "/includes/api.php"
@@ -126,7 +137,10 @@ class WhmcsClient:
             # allow_redirects=False: gap 301/302 thi requests doi POST thanh GET
             # va bo than di - ra mot loi kho hieu. Bao thang de nguoi dung sua URL.
             resp = requests.post(dich, data=form, timeout=self.timeout, allow_redirects=False)
-        except requests.RequestException as exc:
+        except (requests.RequestException, ValueError) as exc:
+            # ValueError: ten may sai thi urllib3 nem LocationParseError - khong
+            # thuoc RequestException, requests cung khong boc lai. URL vao thang
+            # tu config.json / DG_WHMCS_URL thi khong qua buoc kiem luc luu.
             # Khong dua str(exc) ra ngoai: mot so loi keo theo ca URL
             raise WhmcsError(f"Không gọi được WHMCS: {type(exc).__name__}") from None
         if 300 <= resp.status_code < 400:
@@ -134,7 +148,8 @@ class WhmcsClient:
                              "có thể thiếu hoặc thừa thư mục cài WHMCS")
         try:
             data = resp.json()
-        except ValueError:
+        except (ValueError, RecursionError):
+            # RecursionError: JSON long qua sau - server la, hoac WHMCS bi chiem
             raise WhmcsError(f"WHMCS trả về HTTP {resp.status_code}, không phải JSON — "
                              "kiểm tra URL có trỏ đúng thư mục cài WHMCS") from None
         if not isinstance(data, dict):
