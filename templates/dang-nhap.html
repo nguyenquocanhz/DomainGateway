@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="vi" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Đăng nhập — Domain Gateway</title>
+<link rel="stylesheet" href="{{ asset('app.css') }}">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌐</text></svg>">
+<style>
+  /* Trang nay khong dung mot dong JavaScript nao, nen khong the doc lua chon
+     sang/toi trong localStorage nhu index.html. De nguyen dark - dung mau mac
+     dinh cua app, khong nhay mau khi vao duoc ben trong. */
+  .dn-khung {
+    min-height: 100dvh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .dn-the {
+    width: 100%;
+    max-width: 380px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 28px 26px 24px;
+  }
+  .dn-hieu {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin-bottom: 22px;
+  }
+  .dn-hieu span:first-child { font-size: 20px; }
+  .dn-hieu span:last-child {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-strong);
+  }
+  .dn-nhan {
+    display: block;
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+  }
+  .dn-o {
+    width: 100%;
+    box-sizing: border-box;
+    background: var(--bg);
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    color: var(--text);
+    font: inherit;
+    font-size: 14px;
+    padding: 9px 11px;
+    margin-bottom: 16px;
+  }
+  .dn-o:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-dim);
+  }
+  .dn-nut {
+    width: 100%;
+    background: var(--accent);
+    border: 0;
+    border-radius: 6px;
+    color: #1a1206;
+    font: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    padding: 10px;
+    cursor: pointer;
+  }
+  .dn-nut:hover { filter: brightness(1.07); }
+  .dn-loi {
+    background: var(--red-dim);
+    border: 1px solid var(--red-line);
+    border-radius: 6px;
+    color: var(--red-ink);
+    font-size: 13px;
+    padding: 9px 11px;
+    margin-bottom: 18px;
+  }
+  .dn-huong-dan {
+    font-size: 13px;
+    color: var(--text-dim);
+    line-height: 1.55;
+  }
+  .dn-huong-dan code {
+    display: block;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 12.5px;
+    padding: 9px 11px;
+    margin-top: 10px;
+    overflow-x: auto;
+  }
+</style>
+</head>
+<body>
+<div class="dn-khung">
+  <div class="dn-the">
+    <div class="dn-hieu">
+      <span>🌐</span>
+      <span>Domain Gateway</span>
+    </div>
+
+    {% if chua_cau_hinh %}
+      <p class="dn-huong-dan">
+        Chưa có tài khoản nào. Tạo trên máy chủ bằng lệnh dưới đây, rồi tải lại trang:
+        <code>docker exec -it domain-gateway python cli.py matkhau ban@example.com</code>
+      </p>
+    {% else %}
+      {% if loi %}<div class="dn-loi">{{ loi }}</div>{% endif %}
+      <form method="post" action="{{ url_for('dang_nhap') }}">
+        <label class="dn-nhan" for="email">Email</label>
+        <input class="dn-o" type="email" id="email" name="email" value="{{ email }}"
+               autocomplete="username" required autofocus>
+
+        <label class="dn-nhan" for="mat_khau">Mật khẩu</label>
+        <input class="dn-o" type="password" id="mat_khau" name="mat_khau"
+               autocomplete="current-password" required>
+
+        <button class="dn-nut" type="submit">Đăng nhập</button>
+      </form>
+    {% endif %}
+  </div>
+</div>
+</body>
+</html>

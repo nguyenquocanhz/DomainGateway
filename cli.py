@@ -508,6 +508,54 @@ def cmd_cloudflare(args, store: Store, cfg: dict) -> int:
     return 0
 
 
+def cmd_matkhau(args, store: Store, cfg: dict) -> int:
+    """Tao hoac doi tai khoan dang nhap dashboard.
+
+    Mat khau khong bao gio di qua tham so dong lenh: `ps` tren may nhieu nguoi
+    dung se thay no, va shell con ghi lai vao lich su. Hoi qua getpass, hoac
+    sinh ngau nhien voi --sinh.
+    """
+    import getpass
+
+    from gateway import auth
+
+    email = (args.email or "").strip()
+    if "@" not in email:
+        _print("Email khong hop le.")
+        return 2
+
+    if args.sinh:
+        mat_khau = auth.sinh_mat_khau()
+    else:
+        try:
+            mat_khau = getpass.getpass("Mat khau moi: ")
+            lai = getpass.getpass("Nhap lai:     ")
+        except (EOFError, KeyboardInterrupt):
+            _print("")
+            _print("Da huy.")
+            return 1
+        if mat_khau != lai:
+            _print("Hai lan nhap khong khop.")
+            return 1
+        if len(mat_khau) < 10:
+            _print("Mat khau phai tu 10 ky tu tro len.")
+            return 1
+
+    duong_dan = args.config or cfgmod.CONFIG_PATH
+    cfgmod.save({"admin_email": email, "admin_password_hash": auth.bam(mat_khau)},
+                duong_dan)
+    _print(f"Da dat tai khoan: {email}")
+    if args.sinh:
+        # In mot lan duy nhat. Ban bam la mot chieu, khong doc nguoc ra duoc.
+        _print(f"Mat khau: {mat_khau}")
+        _print("Chep ngay - khong xem lai duoc.")
+    _print("Nhung phien dang mo van con hieu luc; dung `--dang-xuat-het` de cat het.")
+    if args.dang_xuat_het:
+        cfgmod.save({"secret_key": auth.sinh_secret_key()}, duong_dan)
+        _print("Da doi khoa phien: moi nguoi phai dang nhap lai.")
+    return 0
+
+
 def cmd_serve(args, store: Store, cfg: dict) -> int:
     from app import create_app
     app = create_app(cfg, store)
@@ -584,6 +632,14 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--verify", action="store_true",
                    help="Chi kiem tra token, khong doc zone nao")
     p.set_defaults(func=cmd_cloudflare)
+
+    p = sub.add_parser("matkhau", help="Tao / doi tai khoan dang nhap dashboard")
+    p.add_argument("email", help="Email dung de dang nhap")
+    p.add_argument("--sinh", action="store_true",
+                   help="Sinh mat khau ngau nhien va in ra mot lan")
+    p.add_argument("--dang-xuat-het", action="store_true",
+                   help="Doi luon khoa phien: moi phien dang mo bi cat")
+    p.set_defaults(func=cmd_matkhau)
 
     p = sub.add_parser("serve", help="Chay dashboard web")
     p.add_argument("--host")

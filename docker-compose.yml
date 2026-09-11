@@ -52,7 +52,7 @@ services:
 
     healthcheck:
       test: ["CMD", "python", "-c",
-             "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8787/api/summary', timeout=4).status == 200 else 1)"]
+             "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8787/healthz', timeout=4).status == 200 else 1)"]
       interval: 30s
       timeout: 5s
       retries: 3

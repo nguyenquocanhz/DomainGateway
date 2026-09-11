@@ -14,10 +14,12 @@ import secrets
 import sys
 import threading
 
-from flask import Flask, Response, jsonify, render_template, request, url_for
+from flask import (Flask, Response, jsonify, redirect, render_template, request,
+                   session, url_for)
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+from gateway import auth
 from gateway import config as cfgmod
 from gateway import exporters
 from gateway.models import iso, lam_sach, lam_sach_giu_khoa, utcnow
@@ -186,6 +188,32 @@ def create_app(cfg: dict = None, store: Store = None) -> Flask:
     # vai tram MB duoc doc thang vao bo nho truoc khi co ai kip tu choi.
     app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024
 
+    # Khoa ky cookie phien. Sinh lan dau roi ghi xuong config.json: de trong bo
+    # nho thi moi lan container khoi dong lai la dang xuat tat ca, con ghim cung
+    # trong ma nguon thi ai doc duoc repo deu gia mao duoc cookie.
+    khoa = cfg.get("secret_key") or ""
+    if not khoa:
+        khoa = auth.sinh_secret_key()
+        try:
+            cfgmod.save({"secret_key": khoa})
+            cfg["secret_key"] = khoa
+        except OSError:
+            # Khong ghi duoc (thu muc chi-doc) van chay duoc, chi la restart se
+            # dang xuat moi nguoi. Thua hon la tu choi khoi dong.
+            pass
+    app.secret_key = khoa
+    app.config["SESSION_COOKIE_HTTPONLY"] = True
+    # Lax chu khong Strict: Strict thi bam link tu ngoai vao (email canh bao,
+    # chat) se rot ra man hinh dang nhap du dang con phien.
+    app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+    # Secure = False theo mac dinh CO CHU Y: duong vao du phong luon la SSH
+    # tunnel toi http://127.0.0.1:8787, ma cookie Secure thi khong di qua http.
+    # Chay sau TLS thi bat len bang DG_COOKIE_SECURE=1.
+    app.config["SESSION_COOKIE_SECURE"] = os.environ.get("DG_COOKIE_SECURE", "") == "1"
+    # Phien song bao lau khi khong dong gi. 12 gio: du mot ngay lam viec, khong
+    # du de mot may muon quen dang xuat thanh van de ca tuan.
+    app.permanent_session_lifetime = 60 * 60 * 12
+
     def thresholds():
         """Doc lai tu cfg moi lan goi - nguong co the doi khi luu cai dat tu web."""
         return int(cfg.get("warn_days", 30)), int(cfg.get("critical_days", 7))
@@ -209,6 +237,89 @@ def create_app(cfg: dict = None, store: Store = None) -> Flask:
                 stamp = 0
             return url_for("static", filename=filename) + "?v=" + str(stamp)
         return {"asset": asset}
+
+    # ---- bat dang nhap ----------------------------------------------------
+    # App nay xoa duoc ten mien va hien token Telegram/Cloudflare o trang Cai
+    # dat, nen mac dinh phai la DONG. Chi bon thu duoi day di qua khong can
+    # phien - moi endpoint khac, ke ca /api/..., deu bi chan.
+    MIEN_TRU = {"dang_nhap", "dang_xuat", "healthz", "static"}
+
+    @app.before_request
+    def bat_dang_nhap():
+        if request.endpoint in MIEN_TRU:
+            return None
+        if session.get("dang_nhap"):
+            return None
+        # Chua cau hinh tai khoan nao thi van chan, va noi ro phai lam gi -
+        # "chua dat mat khau" khong bao gio duoc hieu thanh "ai cung vao duoc".
+        if not auth.da_cau_hinh(cfg):
+            if request.path.startswith("/api/"):
+                return jsonify({"error": "Chua tao tai khoan. Chay: "
+                                         "python cli.py matkhau <email>"}), 503
+            return _trang_dang_nhap(chua_cau_hinh=True, ma=503)
+        # Fetch tu trang doi cau tra loi JSON. Tra 401 chu khong chuyen huong:
+        # chuyen huong cheo origin se bi CSP `connect-src 'self'` chan, va nguoi
+        # dung chi thay nut bam khong phan hoi.
+        if request.path.startswith("/api/"):
+            return jsonify({"error": "Phien dang nhap da het. Tai lai trang."}), 401
+        return redirect(url_for("dang_nhap"))
+
+    def _trang_dang_nhap(loi="", email="", chua_cau_hinh=False, ma=200):
+        """Ve trang dang nhap kem CSP rieng.
+
+        CSP mac dinh cua app la `default-src 'none'` (dung cho JSON) va
+        `form-action 'none'` - de nguyen thi trang nay khong tai noi CSS va
+        khong submit noi form. Trang can dung mot bang CSS, khong can mot dong
+        JavaScript nao, nen script-src o day la 'none'.
+        """
+        html = render_template("dang-nhap.html", loi=loi, email=email,
+                               chua_cau_hinh=chua_cau_hinh)
+        resp = Response(html, mimetype="text/html", status=ma)
+        resp.headers["Content-Security-Policy"] = (
+            "default-src 'self'; script-src 'none'; "
+            "style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
+            "form-action 'self'; frame-ancestors 'none'; "
+            "base-uri 'none'; object-src 'none'"
+        )
+        # Trang co the chua email vua go. Khong de trinh duyet hay proxy giu lai.
+        resp.headers["Cache-Control"] = "no-store"
+        return resp
+
+    @app.route("/healthz")
+    def healthz():
+        """Khong can dang nhap: HEALTHCHECK cua Docker goi duong nay.
+
+        Khong lo ra so lieu gi - chi noi tien trinh con song.
+        """
+        return jsonify({"ok": True})
+
+    @app.route("/dang-nhap", methods=["GET", "POST"])
+    def dang_nhap():
+        if session.get("dang_nhap"):
+            return redirect(url_for("index"))
+        if not auth.da_cau_hinh(cfg):
+            return _trang_dang_nhap(chua_cau_hinh=True, ma=503)
+        loi = ""
+        email_da_go = ""
+        if request.method == "POST":
+            email_da_go = _van_ban(request.form.get("email"), "")
+            mat_khau = request.form.get("mat_khau") or ""
+            email_that, ban_bam = auth.tai_khoan(cfg)
+            if auth.so_email(email_da_go, email_that) and auth.kiem(ban_bam, mat_khau):
+                session.clear()
+                session["dang_nhap"] = email_that
+                session.permanent = True
+                return redirect(url_for("index"))
+            # Mot thong bao duy nhat cho ca hai truong hop sai: noi ro "email nay
+            # khong ton tai" la chi cho nguoi do biet email nao co that.
+            loi = "Email hoac mat khau khong dung."
+        return _trang_dang_nhap(loi=loi, email=email_da_go,
+                                ma=401 if loi else 200)
+
+    @app.route("/dang-xuat", methods=["POST"])
+    def dang_xuat():
+        session.clear()
+        return redirect(url_for("dang_nhap"))
 
     # ---- chan request cheo trang (CSRF) -----------------------------------
     # App nghe o localhost nhung trinh duyet van gui request tu MOI trang web toi

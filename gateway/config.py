@@ -29,6 +29,13 @@ DEFAULTS = {
     "notify": {"telegram_bot_token": "", "telegram_chat_id": "",
                "zalo_bot_token": "", "zalo_chat_id": ""},
     "cloudflare_api_token": "",
+    # Dang nhap dashboard. Rong = chua co tai khoan nao -> app tu chan het,
+    # xem `auth.kiem()`. Mat khau chi nam o dang da bam.
+    "admin_email": "",
+    "admin_password_hash": "",
+    # Khoa ky cookie phien. Sinh lan dau roi ghi vao config.json de restart
+    # khong dang xuat moi nguoi. Doi khoa = dang xuat tat ca.
+    "secret_key": "",
 }
 
 
@@ -52,6 +59,9 @@ def load(path: str = None) -> dict:
         "DG_PORT": ("port", int),
         "DG_HOST": ("host", str),
         "DG_CF_TOKEN": ("cloudflare_api_token", str),
+        "DG_ADMIN_EMAIL": ("admin_email", str),
+        "DG_ADMIN_PASSWORD_HASH": ("admin_password_hash", str),
+        "DG_SECRET_KEY": ("secret_key", str),
     }
     for env, (key, cast) in env_map.items():
         if os.environ.get(env):

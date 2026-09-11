@@ -59,7 +59,7 @@ EXPOSE 8787
 # thì phí. Timeout ngắn vì endpoint này chỉ đọc SQLite, không gọi mạng.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD python -c "import urllib.request,sys; \
-sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8787/api/summary', timeout=4).status == 200 else 1)"
+sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8787/healthz', timeout=4).status == 200 else 1)"
 
 # MỘT worker, nhiều thread — không phải để tiết kiệm RAM:
 #
