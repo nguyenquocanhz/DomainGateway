@@ -116,6 +116,23 @@ class _BotNotifier:
             p["parse_mode"] = parse_mode
         return p
 
+    def _do_dai(self, s: str) -> int:
+        """Do dai theo CACH NEN TANG DEM. Zalo noi "ky tu" nen dem ky tu."""
+        return len(s)
+
+    def _cat_dau(self, s: str, gioi_han: int) -> tuple:
+        """Phan dau dai toi da `gioi_han` (theo _do_dai) va phan con lai.
+
+        Khong cat bang s[:gioi_han]: do la cat theo ky tu, ma voi Telegram mot
+        emoji ton hai don vi - cat theo ky tu van vuot gioi han.
+        """
+        dem = 0
+        for i, ch in enumerate(s):
+            dem += self._do_dai(ch)
+            if dem > gioi_han:
+                return s[:i], s[i:]
+        return s, ""
+
     def _chia(self, text: str) -> list:
         """Cat tin theo dong, khong cat giua mot dong.
 
@@ -126,13 +143,13 @@ class _BotNotifier:
         gioi_han = self.MAX_LEN - 32
         chunks, current = [], ""
         for line in text.split("\n"):
-            while len(line) > gioi_han:
+            while self._do_dai(line) > gioi_han:
                 if current:
                     chunks.append(current)
                     current = ""
-                chunks.append(line[:gioi_han])
-                line = line[gioi_han:]
-            if current and len(current) + len(line) + 1 > gioi_han:
+                dau, line = self._cat_dau(line, gioi_han)
+                chunks.append(dau)
+            if current and self._do_dai(current) + self._do_dai(line) + 1 > gioi_han:
                 chunks.append(current)
                 current = line
             else:
@@ -155,7 +172,8 @@ class _BotNotifier:
         if not self.configured:
             return {"ok": False, "description": "Chưa cấu hình bot token hoặc chat id"}
         noi_dung, parse_mode = self._dinh_dang(text), self.PARSE_MODE
-        if parse_mode and any(len(d) > self.MAX_LEN - 32 for d in noi_dung.split("\n")):
+        if parse_mode and any(self._do_dai(d) > self.MAX_LEN - 32
+                              for d in noi_dung.split("\n")):
             # Mot dong dai hon ca mot tin thi phai cat giua dong, ma cat giua dong
             # HTML la xe doi the -> nen tang tu choi ca tin. Lui ve van ban tron
             # cho rieng lan gui nay.
@@ -192,6 +210,13 @@ class TelegramNotifier(_BotNotifier):
     API = "https://api.telegram.org/bot{token}/{method}"
     MAX_LEN = 4096
     PARSE_MODE = "HTML"
+
+    def _do_dai(self, s: str) -> int:
+        # Telegram dem gioi han 4096 theo don vi UTF-16: emoji ngoai BMP (phan
+        # lon emoji) ton HAI don vi. Dem bang len() thi tin nhieu emoji van vuot,
+        # bi tu choi, va vi gui hong nen canh bao khong bao gio duoc danh dau -
+        # lan chay nao cung hong lai.
+        return len(s.encode("utf-16-le", "surrogatepass")) // 2
 
     def _ten_bot(self, result: dict) -> str:
         u = result.get("username")
