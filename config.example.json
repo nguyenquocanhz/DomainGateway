@@ -24,6 +24,9 @@
   "notify": {
     "telegram_bot_token": "",
     "telegram_chat_id": "",
-    "_note": "Để trống thì bỏ qua thông báo. Tạo bot qua @BotFather, lấy chat_id qua @userinfobot."
+    "_note": "Để trống thì bỏ qua thông báo. Tạo bot qua @BotFather, lấy chat_id qua @userinfobot.",
+    "zalo_bot_token": "",
+    "zalo_chat_id": "",
+    "_zalo": "Tạo bot ở https://bot.zaloplatforms.com. Chat id lấy bằng nút 'Lấy chat id' trong trang Cài đặt sau khi nhắn cho bot một tin."
   }
 }

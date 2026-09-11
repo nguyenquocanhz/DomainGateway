@@ -5,6 +5,8 @@
 #
 #   DG_TELEGRAM_TOKEN=123456789:AA...
 #   DG_TELEGRAM_CHAT=987654321
+#   DG_ZALO_TOKEN=123456789:abc-xyz
+#   DG_ZALO_CHAT=3becaa50ae12474c1e03
 #   DG_CF_TOKEN=...
 #   DG_BKNS_KEY=...
 
@@ -32,6 +34,8 @@ services:
       # nhét token vào.
       DG_TELEGRAM_TOKEN: ${DG_TELEGRAM_TOKEN:-}
       DG_TELEGRAM_CHAT: ${DG_TELEGRAM_CHAT:-}
+      DG_ZALO_TOKEN: ${DG_ZALO_TOKEN:-}
+      DG_ZALO_CHAT: ${DG_ZALO_CHAT:-}
       DG_CF_TOKEN: ${DG_CF_TOKEN:-}
       DG_BKNS_KEY: ${DG_BKNS_KEY:-}
       # KHÔNG đặt mặc định ở đây: config.py cho biến môi trường thắng file,

@@ -1060,14 +1060,20 @@
   }
 
   /* ====================== cài đặt & cảnh báo ====================== */
-  function updateNotifyBadge(configured, lastNotify) {
-    const badge = $("#notifyBadge");
-    if (badge) {
-      badge.dataset.state = configured ? "on" : "off";
-      badge.textContent = configured
-        ? (lastNotify ? `Đã kết nối · gửi ${relTime(lastNotify)}` : "Đã kết nối")
-        : "Chưa kết nối";
-    }
+  // Mỗi thẻ kênh (Telegram, Zalo) có badge riêng. Chấm trên thanh điều hướng
+  // thì bật khi có ít nhất một kênh — trước đây chỉ có Telegram nên hai thứ
+  // trùng nhau, giờ tách ra để thẻ Zalo không báo "Đã kết nối" chỉ vì
+  // Telegram đã cấu hình.
+  function datBadgeKenh(id, on, lastNotify) {
+    const badge = $(id);
+    if (!badge) return;
+    badge.dataset.state = on ? "on" : "off";
+    badge.textContent = on
+      ? (lastNotify ? `Đã kết nối · gửi ${relTime(lastNotify)}` : "Đã kết nối")
+      : "Chưa kết nối";
+  }
+
+  function updateNotifyBadge(configured) {
     const dot = $("#navDotNotify");
     if (dot) dot.hidden = !configured;
   }
@@ -1151,6 +1157,16 @@
         : "Chưa có token. Làm theo 3 bước ở trên rồi dán vào đây.";
       $("#cronCmd").textContent = s.cron_command || "";
       updateNotifyBadge(s.notify_configured, s.last_notify);
+      datBadgeKenh("#notifyBadge", s.telegram_configured, s.last_notify);
+      datBadgeKenh("#zaloBadge", s.zalo_configured, s.last_notify);
+
+      $("#zaloChatId").value = s.zalo_chat_id || "";
+      $("#zaloToken").value = "";
+      $("#zaloToken").placeholder = s.zalo_token_set
+        ? "Để trống nếu không đổi" : "123456789:abc-xyz";
+      $("#zaloHint").textContent = s.zalo_token_set
+        ? `Token đang lưu: ${s.zalo_token_masked} — để trống ô trên nếu không muốn thay đổi.`
+        : "Chưa có token. Làm theo 3 bước ở trên.";
 
       $("#cfToken").value = "";
       $("#cfToken").placeholder = s.cloudflare_token_set
@@ -1239,8 +1255,60 @@
       btn.disabled = true;
       btn.textContent = "Đang gửi...";
       try {
-        const r = await api("/api/notify/test", { method: "POST", body: {} });
-        toast(`Đã gửi tin nhắn thử qua @${r.bot}. Mở Telegram để kiểm tra.`, "ok");
+        const r = await api("/api/notify/test", { method: "POST", body: { kenh: "telegram" } });
+        const bot = (r.kenh && r.kenh[0] && r.kenh[0].bot) || "bot";
+        toast(`Đã gửi tin nhắn thử qua ${bot}. Mở Telegram để kiểm tra.`, "ok");
+        renderSettings();
+      } catch (err) {
+        toast("Không gửi được: " + err.message, "err");
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Gửi tin nhắn thử";
+      }
+    });
+
+    $("#btnSaveZalo").addEventListener("click", async () => {
+      const token = $("#zaloToken").value.trim();
+      const chat = $("#zaloChatId").value.trim();
+      if (!token && !state.settings?.zalo_token_set) {
+        toast("Cần dán bot token Zalo trước.", "err");
+        return;
+      }
+      // Chat id được để trống ở lần lưu đầu: Zalo không hiện nó ở đâu cả, phải
+      // lưu token trước rồi mới đọc được chat id qua nút "Lấy chat id".
+      const body = { zalo_chat_id: chat };
+      if (token) body.zalo_bot_token = token;
+      const s = await saveSettings(body, "Đã lưu cấu hình Zalo.");
+      if (s) renderSettings();
+    });
+
+    $("#btnZaloChatId").addEventListener("click", async (e) => {
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      try {
+        const r = await api("/api/notify/zalo/chat-id", { method: "POST", body: {} });
+        if (!r.chat || !r.chat.length) {
+          toast("Chưa thấy tin nhắn nào. Nhắn một tin cho bot trên Zalo rồi bấm lại.", "err");
+        } else {
+          $("#zaloChatId").value = r.chat[0].chat_id;
+          const ten = r.chat[0].ten ? ` (${r.chat[0].ten})` : "";
+          toast(`Đã điền chat id${ten}. Bấm Lưu cấu hình để giữ lại.`, "ok");
+        }
+      } catch (err) {
+        toast("Không lấy được: " + err.message, "err");
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    $("#btnTestZalo").addEventListener("click", async (e) => {
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      btn.textContent = "Đang gửi...";
+      try {
+        const r = await api("/api/notify/test", { method: "POST", body: { kenh: "zalo" } });
+        const bot = (r.kenh && r.kenh[0] && r.kenh[0].bot) || "bot";
+        toast(`Đã gửi tin nhắn thử qua ${bot}. Mở Zalo để kiểm tra.`, "ok");
         renderSettings();
       } catch (err) {
         toast("Không gửi được: " + err.message, "err");

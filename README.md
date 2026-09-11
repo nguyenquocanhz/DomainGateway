@@ -433,7 +433,7 @@ docker build -t domain-gateway . && docker run -d --name domain-gateway -p 127.0
 ```
 
 Token đặt trong file `.env` cạnh `docker-compose.yml` (đã bị git bỏ qua), không viết thẳng vào
-compose: `DG_TELEGRAM_TOKEN`, `DG_TELEGRAM_CHAT`, `DG_CF_TOKEN`, `DG_BKNS_KEY`. `config.py` đọc
+compose: `DG_TELEGRAM_TOKEN`, `DG_TELEGRAM_CHAT`, `DG_ZALO_TOKEN`, `DG_ZALO_CHAT`, `DG_CF_TOKEN`, `DG_BKNS_KEY`. `config.py` đọc
 sẵn mấy biến này nên **không cần mount `config.json` chỉ để nhét token**. Thiếu `config.json`
 thì app tự lùi về `config.example.json`, chạy được ngay từ lần đầu.
 
@@ -511,9 +511,9 @@ python cli.py serve --port 9000
 
 ---
 
-## Cảnh báo tự động qua Telegram
+## Cảnh báo tự động qua Telegram và Zalo
 
-### Kết nối
+### Telegram
 
 1. Mở [@BotFather](https://t.me/BotFather), gõ `/newbot`, đặt tên rồi copy token.
 2. Nhắn `/start` cho bot vừa tạo — Telegram không cho bot nhắn trước cho người lạ, bỏ bước
@@ -534,6 +534,41 @@ Không thích dùng web thì điền thẳng vào `config.json`:
 ```
 
 rồi chạy `python cli.py notify --test`.
+
+### Zalo
+
+Dùng song song với Telegram được — mỗi kênh đã cấu hình nhận một bản. Một kênh gửi hỏng
+thì cảnh báo **không** bị đánh dấu là đã báo, để kênh đó còn nhận ở lần sau; đổi lại, kênh
+đã gửi được sẽ nhận lặp. Nhận lặp còn hơn mất.
+
+1. Mở [Zalo Bot Creator](https://bot.zaloplatforms.com), tạo bot rồi copy **Bot Token**
+   (dạng `123456789:abc-xyz`).
+2. Dán token vào thẻ **Cảnh báo Zalo** trong trang Cài đặt, bấm *Lưu cấu hình*.
+3. Nhắn một tin bất kỳ cho bot trên Zalo, rồi bấm *Lấy chat id*. Zalo không hiện chat id ở
+   đâu cả — kể cả trong trình tạo bot — nên app đọc nó từ tin nhắn vừa đến qua `getUpdates`.
+4. Bấm *Lưu cấu hình* lần nữa rồi *Gửi tin nhắn thử*.
+
+Hoặc điền thẳng `config.json`:
+
+```json
+"notify": {
+  "zalo_bot_token": "123456789:abc-xyz",
+  "zalo_chat_id": "3becaa50ae12474c1e03"
+}
+```
+
+Khác Telegram ở ba chỗ, đều đọc từ [tài liệu Zalo Bot](https://docs.zaloplatforms.com/docs/BOT/apis/sendMessage)
+chứ không đoán:
+
+| | Telegram | Zalo |
+|---|---|---|
+| Giới hạn một tin | 4096 ký tự | 2000 ký tự — tin dài tự chia nhỏ |
+| Định dạng | HTML | Văn bản trơn |
+| Chat ID | số | có thể là chuỗi hex, ví dụ `3becaa50ae12474c1e03` |
+
+Văn bản trơn là cố ý: chế độ `html` của Zalo không nhận thẻ `<code>`, và tài liệu không nói
+ký tự xuống dòng có được giữ trong chế độ đó hay không. Chắc chắn xuống dòng quan trọng hơn
+chữ đậm.
 
 ### Chống gửi trùng
 
@@ -572,7 +607,7 @@ Kiểm tra: `schtasks /query /tn "DomainGateway"` · Xoá: `schtasks /delete /tn
 | `port` | 8787 | Cổng web |
 
 Biến môi trường ghi đè file: `DG_BKNS_KEY`, `DG_CF_TOKEN`, `DG_WARN_DAYS`, `DG_CRITICAL_DAYS`,
-`DG_PORT`, `DG_HOST`, `DG_TELEGRAM_TOKEN`, `DG_TELEGRAM_CHAT`.
+`DG_PORT`, `DG_HOST`, `DG_TELEGRAM_TOKEN`, `DG_TELEGRAM_CHAT`, `DG_ZALO_TOKEN`, `DG_ZALO_CHAT`.
 
 `DG_CONFIG` đổi chỗ đặt `config.json` — mặc định nằm cạnh mã nguồn, trong Docker trỏ vào
 `/app/data/config.json` để token còn nguyên sau khi dựng lại image.

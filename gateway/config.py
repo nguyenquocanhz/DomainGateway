@@ -26,7 +26,8 @@ DEFAULTS = {
     "critical_days": 7,
     "host": "127.0.0.1",
     "port": 8787,
-    "notify": {"telegram_bot_token": "", "telegram_chat_id": ""},
+    "notify": {"telegram_bot_token": "", "telegram_chat_id": "",
+               "zalo_bot_token": "", "zalo_chat_id": ""},
     "cloudflare_api_token": "",
 }
 
@@ -65,6 +66,10 @@ def load(path: str = None) -> dict:
         notify["telegram_bot_token"] = os.environ["DG_TELEGRAM_TOKEN"]
     if os.environ.get("DG_TELEGRAM_CHAT"):
         notify["telegram_chat_id"] = os.environ["DG_TELEGRAM_CHAT"]
+    if os.environ.get("DG_ZALO_TOKEN"):
+        notify["zalo_bot_token"] = os.environ["DG_ZALO_TOKEN"]
+    if os.environ.get("DG_ZALO_CHAT"):
+        notify["zalo_chat_id"] = os.environ["DG_ZALO_CHAT"]
     cfg["notify"] = notify
     return cfg
 

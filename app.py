@@ -30,7 +30,8 @@ try:
 except ImportError:                                  # pragma: no cover
     class LayoutError(Exception):
         pass
-from gateway.notifier import TelegramNotifier, bucket_of, build_message
+from gateway.notifier import (MultiNotifier, ZaloNotifier, bucket_of, build_message,
+                              tu_cau_hinh)
 from gateway.cloudflare import CloudflareClient, CloudflareError
 from gateway.resolver import normalize_domain
 from gateway.store import Store
@@ -160,8 +161,9 @@ def _danh_ba_hop_le(sections: object) -> bool:
 def _che_token(token: str) -> str:
     """Che bot token, chi de lo phan von cong khai.
 
-    Token Telegram co dang <bot_id>:<35 ky tu bi mat>. bot_id lo ra khong sao -
-    ai chat voi bot cung thay duoc. Phan sau dau hai cham thi che sach.
+    Token Telegram co dang <bot_id>:<35 ky tu bi mat>; token Zalo Bot cung
+    <so>:<bi mat>. Phan truoc dau hai cham lo ra khong sao - ai chat voi bot cung
+    thay duoc. Phan sau thi che sach.
     """
     if not token:
         return ""
@@ -188,10 +190,10 @@ def create_app(cfg: dict = None, store: Store = None) -> Flask:
         """Doc lai tu cfg moi lan goi - nguong co the doi khi luu cai dat tu web."""
         return int(cfg.get("warn_days", 30)), int(cfg.get("critical_days", 7))
 
-    def notifier() -> TelegramNotifier:
-        notify = cfg.get("notify") or {}
-        return TelegramNotifier(notify.get("telegram_bot_token", ""),
-                                notify.get("telegram_chat_id", ""))
+    def notifier() -> MultiNotifier:
+        # Moi kenh da cau hinh (Telegram, Zalo) nhan mot ban. Doc lai cfg moi lan
+        # goi vi token co the vua doi tu trang Cai dat.
+        return tu_cau_hinh(cfg.get("notify"))
 
     def serialize(rec):
         warn, crit = thresholds()
@@ -530,6 +532,12 @@ def create_app(cfg: dict = None, store: Store = None) -> Flask:
             "telegram_token_masked": _che_token(token),
             "telegram_token_set": bool(token),
             "telegram_chat_id": notify.get("telegram_chat_id", ""),
+            "zalo_token_masked": _che_token(notify.get("zalo_bot_token", "")),
+            "zalo_token_set": bool(notify.get("zalo_bot_token")),
+            "zalo_chat_id": notify.get("zalo_chat_id", ""),
+            # Moi the kenh co badge rieng; notify_configured la "it nhat mot kenh"
+            "telegram_configured": notifier().kenh("telegram").configured,
+            "zalo_configured": notifier().kenh("zalo").configured,
             "notify_configured": notifier().configured,
             # Token Cloudflare la chuoi doi khong co cau truc cong khai nao,
             # nen khong he lo ky tu nao ca - bai hoc tu cach che token Telegram.
@@ -564,6 +572,13 @@ def create_app(cfg: dict = None, store: Store = None) -> Flask:
             # "{'a': 1}" vao config.json, im lang.
             notify_changes["telegram_chat_id"] = (
                 _van_ban(payload["telegram_chat_id"], "") or "").strip()
+        # Zalo: cung quy uoc voi Telegram - token rong la giu nguyen
+        zalo_token = (_van_ban(payload.get("zalo_bot_token"), "") or "").strip()
+        if zalo_token:
+            notify_changes["zalo_bot_token"] = zalo_token
+        if "zalo_chat_id" in payload:
+            notify_changes["zalo_chat_id"] = (
+                _van_ban(payload["zalo_chat_id"], "") or "").strip()
         if notify_changes:
             changes["notify"] = notify_changes
 
@@ -641,13 +656,37 @@ def create_app(cfg: dict = None, store: Store = None) -> Flask:
 
     @app.post("/api/notify/test")
     def api_notify_test():
+        """Gui tin thu. `kenh` = "telegram" / "zalo" de thu rieng mot kenh."""
+        payload = _than_json()
+        chi = payload.get("kenh") if payload.get("kenh") in ("telegram", "zalo") else None
         bot = notifier()
+        if chi and not bot.kenh(chi).configured:
+            return jsonify({"error": "Kênh này chưa có bot token hoặc chat id"}), 400
         if not bot.configured:
-            return jsonify({"error": "Chưa cấu hình bot token hoặc chat id"}), 400
-        result = bot.send_test()
+            return jsonify({"error": "Chưa cấu hình kênh cảnh báo nào"}), 400
+        result = bot.send_test(chi)
         if result.get("ok"):
-            return jsonify({"ok": True, "bot": result.get("bot")})
-        return jsonify({"error": result.get("description") or "Gửi thất bại"}), 502
+            return jsonify({"ok": True, "kenh": result["kenh"]})
+        return jsonify({"error": result.get("description") or "Gửi thất bại",
+                        "kenh": result.get("kenh")}), 502
+
+    @app.post("/api/notify/zalo/chat-id")
+    def api_zalo_chat_id():
+        """Bat chat_id tu tin nhan gan nhat gui toi bot Zalo. Chi doc, khong gui.
+
+        Zalo khong hien chat_id o dau ca, ke ca trong trinh tao bot - cach duy
+        nhat la doc no tu mot tin nhan den. Thieu endpoint nay thi nguoi dung
+        phai tu goi getUpdates bang curl, ma getUpdates lai la POST nen khong mo
+        thang tren trinh duyet duoc.
+        """
+        notify = cfg.get("notify") or {}
+        bot = ZaloNotifier(notify.get("zalo_bot_token", ""), "")
+        if not bot.token:
+            return jsonify({"error": "Chưa lưu bot token Zalo"}), 400
+        r = bot.tim_chat_id()
+        if not r.get("ok"):
+            return jsonify({"error": r.get("description") or "Không đọc được tin nhắn"}), 502
+        return jsonify({"ok": True, "chat": r["chat"]})
 
     @app.get("/api/notify/pending")
     def api_notify_pending():

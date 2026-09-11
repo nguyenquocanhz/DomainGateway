@@ -33,7 +33,7 @@ for _stream in (sys.stdout, sys.stderr):
 
 from gateway import config as cfgmod
 from gateway.models import STATUS_LABEL, iso, lam_sach, lam_sach_giu_khoa, utcnow
-from gateway.notifier import TelegramNotifier, bucket_of, build_message
+from gateway.notifier import MultiNotifier, bucket_of, build_message, tu_cau_hinh
 from gateway.resolver import normalize_domain
 from gateway.store import Store
 
@@ -387,10 +387,8 @@ def cmd_export(args, store: Store, cfg: dict) -> int:
     return 0
 
 
-def _make_notifier(cfg: dict) -> TelegramNotifier:
-    notify = cfg.get("notify") or {}
-    return TelegramNotifier(notify.get("telegram_bot_token", ""),
-                            notify.get("telegram_chat_id", ""))
+def _make_notifier(cfg: dict) -> MultiNotifier:
+    return tu_cau_hinh(cfg.get("notify"))
 
 
 def cmd_notify(args, store: Store, cfg: dict) -> int:
@@ -404,14 +402,15 @@ def cmd_notify(args, store: Store, cfg: dict) -> int:
 
     if args.test:
         if not bot.configured:
-            _print("Chua cau hinh telegram_bot_token / telegram_chat_id trong config.json.")
+            _print("Chua cau hinh kenh nao (Telegram hoac Zalo) trong config.json.")
             return 1
         result = bot.send_test()
-        if result.get("ok"):
-            _print(f"Da gui tin nhan kiem tra toi @{result.get('bot')}. Kiem tra Telegram cua ban.")
-            return 0
-        _print(f"That bai: {result.get('description')}")
-        return 1
+        for k in result.get("kenh") or []:
+            if k["ok"]:
+                _print(f"  {k['kenh']}: da gui tin thu qua {k.get('bot') or 'bot'}")
+            else:
+                _print(f"  {k['kenh']}: THAT BAI - {k.get('description')}")
+        return 0 if result.get("ok") else 1
 
     # Loc theo nguong, roi bo nhung cai da bao roi (tru khi --force)
     due = []
@@ -435,7 +434,7 @@ def cmd_notify(args, store: Store, cfg: dict) -> int:
         return 0
 
     if not bot.configured:
-        _print("Chua cau hinh telegram_bot_token / telegram_chat_id trong config.json.")
+        _print("Chua cau hinh kenh nao (Telegram hoac Zalo) trong config.json.")
         print("\n" + message)
         return 1
 
@@ -574,7 +573,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--pdf", help="PDF de in hoac gui di")
     p.set_defaults(func=cmd_export)
 
-    p = sub.add_parser("notify", help="Gui canh bao het han qua Telegram")
+    p = sub.add_parser("notify", help="Gui canh bao het han qua Telegram / Zalo")
     p.add_argument("--dry-run", action="store_true", help="Chi in ra man hinh, khong gui")
     p.add_argument("--test", action="store_true", help="Gui tin nhan kiem tra ket noi")
     p.add_argument("--force", action="store_true", help="Gui lai ca nhung canh bao da bao roi")

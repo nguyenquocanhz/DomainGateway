@@ -296,6 +296,38 @@
 
         <div class="panel">
           <div class="panel-head">
+            <h2>Cảnh báo Zalo</h2>
+            <span class="conn-badge" id="zaloBadge" data-state="off">Chưa kết nối</span>
+          </div>
+          <p class="muted">Cùng nội dung cảnh báo, gửi qua Zalo Bot. Dùng song song với Telegram được — mỗi kênh nhận một bản.</p>
+
+          <ol class="steps">
+            <li>Mở <a href="https://bot.zaloplatforms.com" target="_blank" rel="noopener noreferrer">Zalo Bot Creator</a>, tạo bot rồi copy <b>Bot Token</b>.</li>
+            <li>Dán token, bấm <i>Lưu cấu hình</i>, rồi nhắn một tin bất kỳ cho bot trên Zalo.</li>
+            <li>Bấm <i>Lấy chat id</i> — Zalo không hiện chat id ở đâu cả, phải đọc từ tin nhắn vừa gửi.</li>
+          </ol>
+
+          <div class="field-row">
+            <label class="field">
+              <span>Bot token</span>
+              <input id="zaloToken" type="password" placeholder="123456789:abc-xyz" autocomplete="off">
+            </label>
+            <label class="field">
+              <span>Chat ID</span>
+              <input id="zaloChatId" type="text" placeholder="3becaa50ae12474c1e03" autocomplete="off">
+            </label>
+          </div>
+          <p class="hint" id="zaloHint"></p>
+
+          <div class="drawer-actions">
+            <button class="btn primary" id="btnSaveZalo" type="button">Lưu cấu hình</button>
+            <button class="btn" id="btnZaloChatId" type="button">Lấy chat id</button>
+            <button class="btn" id="btnTestZalo" type="button">Gửi tin nhắn thử</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
             <h2>Trạng thái site qua Cloudflare</h2>
             <span class="conn-badge" id="cfBadge" data-state="off">Chưa kết nối</span>
           </div>
