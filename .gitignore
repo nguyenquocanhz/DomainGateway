@@ -5,6 +5,9 @@ config.json
 .env
 *.env
 
+# Cau hinh rieng cua tung may: service cloudflared tren VPS, token doc tu .env.
+docker-compose.override.yml
+
 # ---- Dữ liệu tên miền của bạn ----------------------------------------------
 # gateway.db chứa tên miền, nhà đăng ký, ngày hết hạn, ghi chú — tài sản riêng,
 # không phải mã nguồn. domains.seed.json là danh sách thật của bạn; bản để
@@ -33,3 +36,7 @@ __pycache__/
 .venv/
 venv/
 .DS_Store
+
+# Ke hoach trien khai: co IP may chu, email, chi tiet dang nhap.
+# Repo nay cong khai — giu o may.
+plans/

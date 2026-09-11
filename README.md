@@ -475,9 +475,13 @@ Trang *Cài đặt* sinh lệnh `schtasks` cho Windows. Trong Docker thì gọi 
 0 8 * * * docker exec domain-gateway python cli.py refresh && docker exec domain-gateway python cli.py notify
 ```
 
-**Deploy lên VPS** — cài Docker, đưa mã lên, ba cách truy cập an toàn (SSH tunnel / nginx +
+**Deploy lên VPS** — cài Docker, đưa mã lên, các cách truy cập an toàn (SSH tunnel / nginx +
 Basic Auth / Tailscale), cron chạy định kỳ, sao lưu, bảng sự cố thường gặp:
 [docs/DEPLOY-VPS.md](docs/DEPLOY-VPS.md)
+
+**Đưa ra subdomain có đăng nhập, không mở cổng nào** — Cloudflare Tunnel + Access, cho tên
+miền đã dùng DNS Cloudflare:
+[docs/DEPLOY-CLOUDFLARE-TUNNEL.md](docs/DEPLOY-CLOUDFLARE-TUNNEL.md)
 
 ### `gunicorn` chỉ nằm trong image
 
@@ -729,6 +733,7 @@ domain_gateway/
 └── docs/
     ├── img/                Ảnh minh hoạ dùng trong README
     ├── DEPLOY-VPS.md       Hướng dẫn deploy lên VPS
+    ├── DEPLOY-CLOUDFLARE-TUNNEL.md  Ra subdomain qua Cloudflare Tunnel + Access
     ├── API-TRA-CUU-TEN-MIEN.md
     └── NHA-DANG-KY-VN-EU-MM.md
 ```

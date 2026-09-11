@@ -9,16 +9,19 @@ Hướng dẫn cho Ubuntu 22.04 / 24.04 hoặc Debian 12. Dùng Docker, mất kh
 **App không có đăng nhập.** Không có màn hình nhập mật khẩu, không có phân quyền. Ai gọi
 được cổng 8787 đều xoá được tên miền, đọc được ghi chú, và đổi được ngưỡng cảnh báo.
 
-Cho nên **đừng mở cổng 8787 ra Internet**. Ba cách truy cập an toàn, xếp theo thứ tự tôi
-khuyên dùng:
+Cho nên **đừng mở cổng 8787 ra Internet**. Bốn cách truy cập an toàn:
 
 | Cách | Hợp khi nào | Công sức |
 |---|---|---|
 | **SSH tunnel** | Chỉ mình bạn dùng, từ 1–2 máy | Không cài gì thêm |
-| **nginx + Basic Auth + TLS** | Cần vào từ điện thoại, hoặc chia cho vài người | ~10 phút |
+| **Cloudflare Tunnel + Access** | Tên miền đã ở Cloudflare, cần vào từ điện thoại, muốn từng người đăng nhập riêng | ~20 phút |
+| **nginx + Basic Auth + TLS** | Cần vào từ điện thoại mà tên miền không ở Cloudflare | ~10 phút |
 | **Tailscale / WireGuard** | Đã có sẵn VPN trong nhà | Tuỳ hệ thống |
 
-Chi tiết từng cách ở mục [Truy cập](#truy-cập).
+Cloudflare Tunnel là cách duy nhất **không mở cổng nào** ra Internet và cho đăng nhập theo
+từng email thay vì một mật khẩu dùng chung — chi tiết ở
+[DEPLOY-CLOUDFLARE-TUNNEL.md](DEPLOY-CLOUDFLARE-TUNNEL.md). Ba cách còn lại ở mục
+[Truy cập](#truy-cập) bên dưới.
 
 **Phải đặt ở gốc tên miền.** 16 lời gọi API trong `app.js` là đường dẫn tuyệt đối `/api/...`
 và không có base URL cấu hình được. `dg.example.com` chạy được; `example.com/domain-gateway/`
