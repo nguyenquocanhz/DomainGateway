@@ -69,7 +69,8 @@ def chuan_hoa_url(url: str) -> str:
 def _so(gia_tri) -> int | None:
     try:
         return int(gia_tri)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
+        # OverflowError: JSON "1e999" doc ra inf, int(inf) no
         return None
 
 
@@ -114,10 +115,12 @@ def _hang(m: dict) -> tuple:
 class WhmcsClient:
     def __init__(self, url: str, identifier: str, secret: str,
                  accesskey: str = "", timeout: int = 30):
-        self.url = (url or "").strip()
-        self.identifier = (identifier or "").strip()
-        self.secret = (secret or "").strip()
-        self.accesskey = (accesskey or "").strip()
+        # str(): config.json sua tay co the ghi so. .strip() tren int no, va vi
+        # trang Cai dat cung tao client nen hong ca GET /api/settings.
+        self.url = str(url or "").strip()
+        self.identifier = str(identifier or "").strip()
+        self.secret = str(secret or "").strip()
+        self.accesskey = str(accesskey or "").strip()
         self.timeout = timeout
 
     @property
