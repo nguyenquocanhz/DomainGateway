@@ -463,9 +463,29 @@ trong `/app`**, và lưu token từ trang *Cài đặt* sẽ báo lỗi. Để t
 vừa không mất token mỗi lần dựng lại image. Bỏ biến này đi thì đường dẫn về như cũ, luồng dev
 trên máy không đổi gì.
 
-**Cổng buộc vào `127.0.0.1`.** App **không có đăng nhập** — ai gọi được cổng này đều xoá được
-tên miền và đổi được cấu hình. Bỏ tiền tố `127.0.0.1:` đi là mở thẳng ra Internet. Muốn truy
-cập từ xa thì đặt sau reverse proxy có xác thực, hoặc đi qua VPN/SSH tunnel.
+**Cổng buộc vào `127.0.0.1`.** App có đăng nhập (xem *Đăng nhập* bên dưới), nhưng một mật
+khẩu là một thứ để dò. Bỏ tiền tố `127.0.0.1:` đi là mở thẳng ra Internet. Muốn truy cập từ
+xa thì đặt sau reverse proxy, Cloudflare Tunnel, hoặc đi qua VPN/SSH tunnel — lúc đó bot
+quét không bao giờ chạm tới trang đăng nhập.
+
+### Đăng nhập
+
+Một tài khoản duy nhất, tạo từ dòng lệnh:
+
+```bash
+python cli.py matkhau ban@example.com
+```
+
+Hỏi mật khẩu hai lần rồi băm bằng scrypt và cất vào `config.json` — không bao giờ lưu
+nguyên văn, và không nhận mật khẩu qua tham số dòng lệnh (`ps` trên máy nhiều người dùng
+sẽ thấy). Muốn máy sinh hộ thì `--sinh`, nó in ra đúng một lần.
+
+Chưa tạo tài khoản thì mọi đường trả 503 kèm hướng dẫn — mặc định là **đóng**, không phải
+mở. Đổi mật khẩu là chạy lại lệnh trên; thêm `--dang-xuat-het` để cắt luôn mọi phiên đang mở.
+
+Phiên sống 12 giờ nếu không đụng gì. Cookie không đặt cờ `Secure` theo mặc định, vì đường
+vào dự phòng luôn là SSH tunnel tới `http://127.0.0.1:8787` — chạy sau TLS thì bật
+`DG_COOKIE_SECURE=1`.
 
 ### Chạy định kỳ
 

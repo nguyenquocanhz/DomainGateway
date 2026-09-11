@@ -6,8 +6,14 @@ Hướng dẫn cho Ubuntu 22.04 / 24.04 hoặc Debian 12. Dùng Docker, mất kh
 
 ## Đọc cái này trước
 
-**App không có đăng nhập.** Không có màn hình nhập mật khẩu, không có phân quyền. Ai gọi
-được cổng 8787 đều xoá được tên miền, đọc được ghi chú, và đổi được ngưỡng cảnh báo.
+**App có đăng nhập, nhưng chỉ một tài khoản.** Tạo bằng `cli.py matkhau <email>`. Chưa tạo
+thì mọi đường trả 503 kèm hướng dẫn — không phải "ai cũng vào được". Đăng nhập rồi thì có
+toàn quyền: xoá tên miền, đọc token trong trang *Cài đặt*, đổi ngưỡng cảnh báo. Không có
+phân quyền, không có tài khoản chỉ-đọc.
+
+Lớp đăng nhập đó đủ để đưa app ra Internet, nhưng vẫn nên **để cổng 8787 nghe ở
+`127.0.0.1`** và đi qua một lớp nữa. Một mật khẩu là một thứ để dò; thêm lớp ngoài thì bot
+quét không bao giờ chạm tới trang đăng nhập.
 
 Cho nên **đừng mở cổng 8787 ra Internet**. Bốn cách truy cập an toàn:
 

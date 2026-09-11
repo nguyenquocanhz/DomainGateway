@@ -12,9 +12,17 @@ Docker và chạy container ở tài liệu đó vẫn áp dụng nguyên vẹn 
 
 ## Vì sao chọn cách này
 
-**App không có đăng nhập.** Đó là câu đầu tiên của DEPLOY-VPS.md và cũng là lý do của cả
-bài này. Ai gọi được app đều xoá được tên miền và đọc được token trong trang Cài đặt. Nên
-lớp xác thực bắt buộc phải do hạ tầng lo.
+App đã có đăng nhập của riêng nó (`cli.py matkhau`), nên bài này **không** phải là cách
+duy nhất để đưa nó ra Internet an toàn. Cái Cloudflare Tunnel thêm vào là: không mở cổng
+nào, TLS khỏi lo, và IP gốc không lộ.
+
+Bạn chọn được một trong hai:
+
+- **Chỉ Tunnel** — người dùng thấy trang đăng nhập của app. Một mật khẩu, chia cho vài
+  người dùng chung. Đơn giản nhất.
+- **Tunnel + Access** — thêm một lớp đăng nhập theo email ở tầng Cloudflare, trước cả khi
+  request chạm tới app. Hai lần đăng nhập, nhưng chặn được bot quét từ ngoài và có log ai
+  vào lúc nào. Mục 4 bên dưới là phần này; bỏ qua được nếu không cần.
 
 So với nginx + Basic Auth:
 
@@ -49,7 +57,7 @@ quay lại đường nginx trong DEPLOY-VPS.md — nó vẫn đúng.
 Trình duyệt
     │  https://ten-cua-ban.example.com
     ▼
-Cloudflare edge ── TLS, và Access chặn ngay ở đây
+Cloudflare edge ── TLS (và Access chặn ngay ở đây, nếu bật mục 4)
     │
     │  kết nối do VPS CHỦ ĐỘNG mở ra, không phải Cloudflare gọi vào
     ▼
@@ -148,17 +156,17 @@ Cloudflare tự tạo bản ghi CNAME trỏ về `<tunnel-id>.cfargotunnel.com`.
 
 ---
 
-## 4. Bật Access — đừng bỏ bước này
+## 4. Access — lớp thứ hai, tuỳ chọn
 
-Xong bước 3 là app đã ra Internet **mà chưa có đăng nhập nào**. Đừng rời máy giữa bước 3
-và 4. Phải dừng thì:
+Xong bước 3 là dùng được rồi: mở link ra sẽ thấy trang đăng nhập của app. Mục này thêm một
+lớp nữa ở tầng Cloudflare, chặn từ trước khi request chạm tới VPS.
 
-```bash
-docker compose stop cloudflared
-```
+**Nếu chưa tạo tài khoản trong app** (`cli.py matkhau <email>`) thì làm ngay bây giờ, trước
+khi đi tiếp — app chưa có tài khoản sẽ trả 503 cho mọi người, kể cả bạn.
 
 Hostname không phải thứ bí mật: mọi tên miền có chứng chỉ TLS đều nằm trong log
-Certificate Transparency công khai.
+Certificate Transparency công khai. Bot sẽ tìm ra, và lúc đó lớp duy nhất chắn giữa chúng
+với dữ liệu của bạn là một mật khẩu.
 
 Dashboard → **Access controls** → **Applications** → **Add an application** →
 **Self-hosted**:
@@ -199,17 +207,24 @@ cấu hình phía edge bị sửa nhầm.
 Từ một máy bất kỳ, **chưa đăng nhập**:
 
 ```bash
-curl -sI https://ten-cua-ban.example.com | head -3
+curl -sI https://ten-cua-ban.example.com/ | head -3
 ```
 
-Phải ra **302** kèm `location:` trỏ về `*.cloudflareaccess.com`.
+**Nếu chỉ dùng Tunnel** (bỏ qua mục 4): phải ra **302** về `/dang-nhap` — trang đăng nhập
+của app. Và `/api/summary` phải ra **401**:
 
-**Ra 200 là Access chưa có tác dụng.** Dừng lại, kiểm application đã trỏ đúng hostname
-chưa, đừng dùng tiếp.
+```bash
+curl -sI https://ten-cua-ban.example.com/api/summary | head -1
+```
 
-Rồi mở trình duyệt ở cửa sổ ẩn danh: nhập email → nhận mã 6 số → vào được giao diện. Thử
-thêm một tên miền rồi xoá đi — thao tác ghi phải chạy, không ra lỗi 403 *"Từ chối request
-chéo trang"*.
+Ra **200** ở bất kỳ đường nào trong hai đường trên nghĩa là chưa tạo tài khoản hoặc lớp
+đăng nhập chưa chạy. Dừng lại, đừng dùng tiếp.
+
+**Nếu có bật Access**: phải ra 302 về `*.cloudflareaccess.com` — Access chặn trước, người
+dùng chưa thấy trang đăng nhập của app. Ra 200 là application chưa trỏ đúng hostname.
+
+Rồi mở trình duyệt ở cửa sổ ẩn danh, đăng nhập, và thử **thêm một tên miền rồi xoá đi** —
+thao tác ghi phải chạy, không ra lỗi 403 *"Từ chối request chéo trang"*.
 
 ---
 
@@ -218,7 +233,8 @@ chéo trang"*.
 | Triệu chứng | Nguyên nhân | Xử lý |
 |---|---|---|
 | **Bấm nút không phản hồi**, F12 báo bị CSP chặn | Phiên Access hết hạn giữa lúc trang đang mở. Fetch `/api/...` bị chuyển hướng sang `cloudflareaccess.com`, mà CSP của trang là `connect-src 'self'` nên trình duyệt chặn — không hiện màn hình đăng nhập, chỉ im lặng hỏng | **F5**. Đặt Session Duration dài (24h) để hiếm gặp. Đừng nới CSP của app để lách |
-| `curl -sI` trả **200** thay vì 302 | Application chưa gắn đúng hostname | Kiểm lại hostname trong Access application |
+| `curl -sI` trả **200** thay vì 302 | Chưa tạo tài khoản trong app, hoặc Access chưa gắn đúng hostname | `cli.py matkhau <email>`; kiểm hostname trong Access application |
+| Mọi đường trả **503** *"Chua tao tai khoan"* | Đúng như thiết kế — app mặc định đóng | `docker exec -it domain-gateway python cli.py matkhau <email>` |
 | Trình duyệt báo **502** | Route điền `localhost:8787` | Sửa URL thành `app:8787` |
 | Trang tải được nhưng **bảng trống**, F12 đầy 404 | Route có Path | Xoá Path đi, app phải ở gốc subdomain |
 | Tunnel HEALTHY nhưng hostname trả **1033** | Connector chết hoặc token sai | `docker compose logs cloudflared` |
@@ -229,9 +245,9 @@ chéo trang"*.
 
 ## Những chỗ cách này **không** giải quyết
 
-- **Access không thay được việc app thiếu đăng nhập.** Ai vào được bằng email trong
-  allowlist là có toàn quyền: xoá tên miền, đọc token ở trang Cài đặt. Allowlist chỉ nên
-  có người thật sự sở hữu hệ thống.
+- **Access không phân quyền hộ app.** App chỉ có một tài khoản, không có vai trò chỉ-đọc.
+  Ai qua được Access rồi biết mật khẩu app là có toàn quyền: xoá tên miền, đọc token ở
+  trang Cài đặt.
 - **Tunnel token mạnh ngang chìa khoá.** Ai có nó dựng được connector trỏ vào tunnel của
   bạn. Giữ `.env` ở `chmod 600`, đừng commit — `.gitignore` và `.dockerignore` đều đã chặn.
 - **Phụ thuộc Cloudflare.** Cloudflare hỏng thì app không vào được từ Internet. SSH tunnel
