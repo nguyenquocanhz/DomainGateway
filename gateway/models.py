@@ -176,6 +176,12 @@ def parse_dt(value) -> datetime | None:
         dt.astimezone(timezone.utc)
     except OverflowError:
         return None
+    # Windows khong doi duoc sang gio may ngoai 1970..3000 (OSError errno 22),
+    # ma tong quan, xuat Markdown/XLSX/PDF va `cli list` deu doi - mot ngay
+    # 9999-12-31 trong kho la hong ca ba cho moi lan goi. Ten mien co tu 1985,
+    # dang ky toi da 10 nam: ngoai khoang nay chac chan la du lieu rac.
+    if not 1971 <= dt.year <= 2999:
+        return None
     return dt
 
 
@@ -279,7 +285,7 @@ class DomainRecord:
 
         Theo muc do dang lo:
           het-ma-active  WHMCS con de Active nhung registry da het han
-          hoa-don-tre    hoa don gia han den SAU ngay het han (lich WHMCS) - ten mien het
+          hoa-don-tre    hoa don gia han den SAU ngay het han that - ten mien het
                          truoc khi khach kip bi thu tien
           lech           hai ngay het han lech nhau qua 1 ngay
           chua-ro        mot ben chua co ngay het han
@@ -295,14 +301,18 @@ class DomainRecord:
         con = self.days_left
         if dang_active and con is not None and con < 0:
             return "het-ma-active"
-        # So hoa don voi ngay het han CUA CHINH WHMCS: hai ngay cung mot lich nen
-        # khong vuong mui gio. So voi registry (gio UTC) thi phai doan mui gio:
-        # so thang bao nham ~7/24 ten mien khi WHMCS o VN, con cho dung sai 1 ngay
-        # thi lot hoa don tre that khi WHMCS o mui gio am. Lech giua lich WHMCS
-        # va registry da co nhanh "lech" lo. Chi khi WHMCS thieu ngay het han moi
-        # lui ve so voi registry, kem dung sai 1 ngay.
+        # "That" la ngay cua registry. Nhung hoa don nam tren lich WHMCS (ngay
+        # tran, gio dia phuong) con registry la gio UTC - so thang thi phai doan
+        # mui gio: bao nham khi WHMCS o VN, lot khi WHMCS o My.
+        # Khi hai ngay het han KHOP (lech <= 1 ngay chinh la mui gio), ngay het
+        # han cua WHMCS dai dien cho ngay that tren lich WHMCS - so hoa don voi
+        # no, khong phai doan gi. Khi chung LECH, ngay WHMCS khong con dai dien
+        # duoc: WHMCS chua cap nhat lan gia han thi hoa don sau ngay WHMCS la
+        # binh thuong, WHMCS tuong con han lau hon thi hoa don truoc ngay WHMCS
+        # van co the sau ngay that. Luc do phai so voi registry, dung sai 1 ngay.
         if dang_active and self.whmcs_nextdue:
-            if self.whmcs_expiry:
+            lech = self.whmcs_lech_ngay
+            if lech is not None and abs(lech) <= 1:
                 tre = self.whmcs_nextdue.date() > self.whmcs_expiry.date()
             elif self.expires_at:
                 tre = (self.whmcs_nextdue.date() - self.expires_at.date()).days > 1
