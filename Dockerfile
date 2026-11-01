@@ -16,7 +16,7 @@
 #      token mỗi lần dựng lại image.
 #   4. Chỉ MỘT worker — xem CMD ở cuối file.
 
-FROM python:3.12-slim
+FROM python:3.14-slim
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -40,7 +40,7 @@ RUN pip install -r requirements.txt \
     # gunicorn CHỈ có trong image, không nằm trong requirements.txt của app:
     # bản thân app không import nó, và chạy dưới Windows thì gunicorn không cài
     # được. Werkzeug dev server không dành cho môi trường thật.
-    && pip install "gunicorn>=21.2,<24"
+    && pip install "gunicorn>=23,<27"
 
 COPY . .
 
