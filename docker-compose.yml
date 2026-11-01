@@ -45,6 +45,16 @@ services:
       DG_WHMCS_ACCESSKEY: ${DG_WHMCS_ACCESSKEY:-}
       DG_CF_TOKEN: ${DG_CF_TOKEN:-}
       DG_BKNS_KEY: ${DG_BKNS_KEY:-}
+      # Đặt sau reverse proxy thì điền tên miền proxy (vd. dg.example.com),
+      # không thì mọi request bị 403 "Host không được phép". Xem DEPLOY-VPS.md.
+      DG_ALLOWED_HOSTS: ${DG_ALLOWED_HOSTS:-}
+      # Whitelist IP (vd. 203.0.113.7,192.168.1.0/24). Để trống thì sửa được
+      # ở trang Cài đặt; đặt ở đây thì biến môi trường thắng, giao diện khoá ô.
+      DG_ALLOWED_IPS: ${DG_ALLOWED_IPS:-}
+      # nginx trên host nói chuyện với container qua gateway của bridge Docker,
+      # không phải loopback. Dùng whitelist IP sau nginx thì phải tin dải này,
+      # không thì app chỉ thấy IP gateway và whitelist vô nghĩa.
+      DG_TRUSTED_PROXIES: ${DG_TRUSTED_PROXIES:-}
       # KHÔNG đặt mặc định ở đây: config.py cho biến môi trường thắng file,
       # nên một giá trị mặc định cứng sẽ âm thầm ghi đè ngưỡng người dùng vừa
       # lưu ở trang Cài đặt, mỗi lần container khởi động lại. Để rỗng thì

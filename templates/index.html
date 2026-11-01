@@ -400,6 +400,30 @@
         </div>
 
         <div class="panel">
+          <div class="panel-head">
+            <h2>Whitelist truy cập</h2>
+            <span class="conn-badge" id="wlBadge" data-state="off">Tắt</span>
+          </div>
+          <p class="muted">App không có đăng nhập. Mở ra mạng LAN hay sau reverse proxy thì giới hạn
+            ai được vào bằng IP. Để trống là không giới hạn. Truy cập ngay trên máy chạy app
+            (<code>127.0.0.1</code>) luôn được phép, nên gõ nhầm cũng không tự khoá mình ra ngoài.</p>
+          <label class="field">
+            <span>IP hoặc dải CIDR được phép <em>(mỗi dòng một mục, vd. 192.168.1.0/24)</em></span>
+            <textarea id="wlIps" rows="4" spellcheck="false" placeholder="203.0.113.7&#10;192.168.1.0/24"></textarea>
+          </label>
+          <p class="hint" id="wlIpHint"></p>
+          <label class="field">
+            <span>Tên host được phép <em>(ngoài localhost — vd. tên miền của reverse proxy)</em></span>
+            <textarea id="wlHosts" rows="2" spellcheck="false" placeholder="dg.example.com"></textarea>
+          </label>
+          <p class="hint" id="wlHostHint"></p>
+          <div class="btn-row">
+            <button class="btn primary" id="btnSaveWl" type="button">Lưu whitelist</button>
+            <button class="btn" id="btnAddMyIp" type="button">Thêm IP của tôi</button>
+          </div>
+        </div>
+
+        <div class="panel">
           <div class="panel-head"><h2>Giao diện</h2></div>
           <p class="muted">Lựa chọn lưu trong trình duyệt này. Chọn <em>Theo hệ thống</em> thì
             giao diện tự đổi khi Windows chuyển sáng/tối.</p>

@@ -293,6 +293,29 @@ sudo certbot renew --dry-run
 **Vẫn giữ `127.0.0.1:8787` trong `docker-compose.yml`.** nginx nói chuyện với app qua
 loopback, cổng đó không cần hở ra ngoài.
 
+**Khai tên miền proxy cho app.** nginx chuyển tiếp `Host: dg.example.com`, mà app mặc định
+chỉ nhận Host là `localhost` / `127.0.0.1` / `::1` (chống DNS rebinding). Thêm vào file
+`.env` cạnh `docker-compose.yml` rồi `docker compose up -d`:
+
+```bash
+DG_ALLOWED_HOSTS=dg.example.com
+```
+
+Thiếu dòng này thì mọi request qua nginx trả về 403 "Host không được phép".
+
+**Whitelist IP (tuỳ chọn, thêm một lớp ngoài mật khẩu nginx).** Trang *Cài đặt → Whitelist
+truy cập* cho nhập IP hoặc dải CIDR được vào; bấm *Thêm IP của tôi* để khỏi tự khoá mình. Sau
+nginx, app chỉ thấy IP thật qua `X-Real-IP` nếu tin proxy đó. nginx chạy trên host còn app
+trong Docker thì kết nối đến từ gateway của bridge, nên khai thêm:
+
+```bash
+DG_TRUSTED_PROXIES=172.16.0.0/12
+```
+
+Thiếu dòng này app coi mọi người là `172.17.0.1`, whitelist không phân biệt được ai.
+Chỉ tin dải bridge khi cổng 8787 vẫn gắn `127.0.0.1:` như mặc định — mở cổng ra ngoài thì ai
+cũng tự đặt được `X-Real-IP`.
+
 **Đừng tắt việc chuyển tiếp header của client.** Lớp chặn CSRF của app đọc `Sec-Fetch-Site` —
 header do chính trình duyệt đặt. nginx chuyển tiếp mặc định, nhưng nếu bạn thêm
 `proxy_pass_request_headers off` thì mọi thao tác ghi sẽ hỏng theo kiểu rất khó đoán.

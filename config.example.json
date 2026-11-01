@@ -17,6 +17,12 @@
 
   "host": "127.0.0.1",
   "port": 8787,
+  "allowed_hosts": [],
+  "_allowed_hosts": "Chống DNS rebinding: mặc định chỉ nhận Host là localhost / 127.0.0.1 / ::1. Đặt sau reverse proxy (vd. dg.example.com) hoặc mở bằng IP LAN thì thêm tên đó vào đây, hoặc dùng biến DG_ALLOWED_HOSTS=a.com,b.com.",
+  "allowed_ips": [],
+  "_allowed_ips": "Whitelist IP / dải CIDR được vào app (vd. \"192.168.1.0/24\"). Rỗng = không giới hạn. 127.0.0.1 luôn được phép. Sửa được ở trang Cài đặt, hoặc biến DG_ALLOWED_IPS.",
+  "trusted_proxies": [],
+  "_trusted_proxies": "Proxy được tin header X-Real-IP / X-Forwarded-For. Rỗng = chỉ loopback (nginx cùng máy). Docker sau nginx trên host: thêm dải bridge, vd. \"172.16.0.0/12\". Biến DG_TRUSTED_PROXIES.",
 
   "_cloudflare": "Token doc-chi tu dash.cloudflare.com/profile/api-tokens. Chi can Zone:Read + Zone.DNS:Read, khong can quyen ghi nao.",
   "cloudflare_api_token": "",

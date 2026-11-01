@@ -21,6 +21,10 @@ from urllib.parse import urljoin, urlparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.connection import HTTPConnection, HTTPSConnection
+from urllib3.connectionpool import HTTPConnectionPool, HTTPSConnectionPool
+from urllib3.exceptions import NewConnectionError
 
 from .models import DomainRecord, lam_sach, lam_sach_ban_ghi, parse_dt, utcnow
 
@@ -63,6 +67,22 @@ class RateLimiter:
                 time.sleep(wait)
                 now = time.monotonic()
             self._next = now + self.interval
+
+
+# Moi Resolver dung chung mot bo gioi han cho moi nguon trong ca tien trinh.
+# /api/lookup tao Resolver moi moi lan goi; neu moi cai mot RateLimiter rieng thi
+# bkns_rpm chang gioi han gi - tra nhanh lien tiep, hay tra trong luc job refresh
+# dang chay, deu ban thang vao BKNS va an 429.
+_LIMITER_CHUNG: dict = {}
+_LIMITER_KHOA = threading.Lock()
+
+
+def limiter_chung(nguon: str, rpm: int, safety: float = 1.0) -> RateLimiter:
+    with _LIMITER_KHOA:
+        khoa = (nguon, rpm, safety)
+        if khoa not in _LIMITER_CHUNG:
+            _LIMITER_CHUNG[khoa] = RateLimiter(rpm, safety=safety)
+        return _LIMITER_CHUNG[khoa]
 
 
 # --------------------------------------------------------------------------- #
@@ -138,6 +158,59 @@ def _rdap_entities(payload: dict) -> tuple[str, str]:
 MAX_CHUYEN_HUONG = 5
 
 
+def _kiem_peer(lop):
+    """Lop ket noi urllib3 kiem IP THAT cua socket ngay sau connect, truoc khi
+    bat tay TLS va gui request.
+
+    Kiem ten mien truoc roi de requests phan giai lai la ho DNS rebinding: ten
+    TTL 0 tra IP cong khai luc kiem, 127.0.0.1 luc noi. Kiem tai socket thi
+    khong con lan phan giai thu hai nao de lua.
+    """
+    class KiemPeer(lop):
+        def _new_conn(self):
+            sock = super()._new_conn()
+            try:
+                ip = sock.getpeername()[0]
+            except OSError:
+                ip = ""
+            if not _ip_cong_khai(ip):
+                sock.close()
+                raise NewConnectionError(self, f"dia chi noi bo: {ip or self.host}")
+            return sock
+    return KiemPeer
+
+
+class _PoolHttp(HTTPConnectionPool):
+    ConnectionCls = _kiem_peer(HTTPConnection)
+
+
+class _PoolHttps(HTTPSConnectionPool):
+    ConnectionCls = _kiem_peer(HTTPSConnection)
+
+
+class _AdapterKiemPeer(HTTPAdapter):
+    # Chi thay pool ket noi thang. Di qua proxy (HTTPS_PROXY) thi socket noi
+    # toi proxy do nguoi dung tu cau hinh - ProxyManager dung pool rieng, khong
+    # bi kiem, nhung ten mien dich van qua _tro_vao_mang_noi_bo nhu cu.
+    def init_poolmanager(self, *args, **kwargs):
+        super().init_poolmanager(*args, **kwargs)
+        self.poolmanager.pool_classes_by_scheme = {"http": _PoolHttp, "https": _PoolHttps}
+
+
+_phien_rdap = threading.local()
+
+
+def _phien() -> requests.Session:
+    """Session theo tung thread: requests.Session khong dam bao an toan thread."""
+    s = getattr(_phien_rdap, "s", None)
+    if s is None:
+        s = requests.Session()
+        s.mount("http://", _AdapterKiemPeer())
+        s.mount("https://", _AdapterKiemPeer())
+        _phien_rdap.s = s
+    return s
+
+
 def _get_kiem_tung_chang(url: str, headers: dict, timeout: int):
     """GET nhung tu di theo chuyen huong, kiem dia chi truoc MOI chang.
 
@@ -153,7 +226,7 @@ def _get_kiem_tung_chang(url: str, headers: dict, timeout: int):
         if _tro_vao_mang_noi_bo(chu.hostname or "", chu.port or (443 if chu.scheme == "https" else 80)):
             raise requests.RequestException(f"dia chi noi bo: {chu.hostname}")
 
-        resp = requests.get(url, headers=headers, timeout=timeout, allow_redirects=False)
+        resp = _phien().get(url, headers=headers, timeout=timeout, allow_redirects=False)
         if resp.status_code not in (301, 302, 303, 307, 308):
             return resp
         tiep = resp.headers.get("Location")
@@ -280,41 +353,81 @@ def _tro_vao_mang_noi_bo(host: str, cong: int = 43) -> bool:
     chan thi thanh ra quet cong 43 trong mang noi bo tu may nguoi dung, roi noi
     dung may chu noi bo tra ve chay tiep vao giao dien lan file xuat.
     """
+    return not _dia_chi_cong_khai(host, cong)
+
+
+def _ip_cong_khai(ip_text: str) -> bool:
+    """is_global chu khong liet ke tung co: danh sach co cu bo sot CGNAT
+    100.64.0.0/10 (is_private = False nhung van la mang noi bo cua nha mang)."""
+    try:
+        ip = ipaddress.ip_address(ip_text.split("%", 1)[0])
+    except ValueError:
+        return False
+    if getattr(ip, "ipv4_mapped", None):
+        ip = ip.ipv4_mapped
+    return ip.is_global and not ip.is_multicast
+
+
+def _dia_chi_cong_khai(host: str, cong: int) -> list:
+    """Cac dia chi (family, sockaddr) cua host - RONG neu co bat ky dia chi
+    nao khong cong khai hoac khong phan giai duoc.
+
+    getaddrinfo nem UnicodeError (mot ValueError, khong phai OSError) voi ten
+    nhu "a..com" hay label dai qua 63 ky tu - ten lay tu phan hoi WHOIS thi
+    gap duoc. Bat ca hai, coi nhu khong an toan.
+    """
     try:
         thong_tin = socket.getaddrinfo(host, cong, proto=socket.IPPROTO_TCP)
-    except OSError:
-        return True                 # khong phan giai duoc thi coi nhu khong an toan
-    for *_, addr in thong_tin:
-        try:
-            ip = ipaddress.ip_address(addr[0])
-        except ValueError:
-            return True
-        if (ip.is_private or ip.is_loopback or ip.is_link_local
-                or ip.is_reserved or ip.is_multicast or ip.is_unspecified):
-            return True
-    return False
+    except (OSError, ValueError):
+        return []
+    ket_qua = []
+    for family, _, _, _, addr in thong_tin:
+        if not _ip_cong_khai(addr[0]):
+            return []
+        ket_qua.append((family, addr))
+    return ket_qua
 
 
 def whois_query(server: str, query: str, timeout: int = 20, limit: int = 200000) -> str:
-    if _tro_vao_mang_noi_bo(server):
+    # Noi thang toi IP vua kiem, khong de create_connection phan giai lan hai:
+    # ten mien TTL 0 tra IP cong khai luc kiem va 127.0.0.1 luc noi (DNS rebinding).
+    dia_chi = _dia_chi_cong_khai(server, 43)
+    if not dia_chi:
         raise OSError(f"whois: tu choi may chu tro vao mang noi bo: {server}")
-    sock = socket.create_connection((server, 43), timeout=timeout)
-    try:
-        sock.settimeout(timeout)
-        sock.sendall((query + "\r\n").encode("utf-8", "ignore"))
-        chunks = []
-        total = 0
-        while True:
-            data = sock.recv(8192)
-            if not data:
-                break
-            chunks.append(data)
-            total += len(data)
-            if total > limit:
-                break
-        return b"".join(chunks).decode("utf-8", "replace")
-    finally:
-        sock.close()
+    # timeout cua socket tinh cho TUNG recv. May chu nho giot mot byte moi 19s
+    # giu worker hang gio, job refresh ket o "dang chay" va moi lan bam lai
+    # deu 409. Han chot tong chan duoc chuyen do.
+    han_chot = time.monotonic() + timeout * 2
+    loi = None
+    for family, addr in dia_chi:
+        sock = socket.socket(family, socket.SOCK_STREAM)
+        try:
+            sock.settimeout(timeout)
+            sock.connect(addr)
+        except OSError as exc:
+            sock.close()
+            loi = exc
+            continue
+        try:
+            sock.sendall((query + "\r\n").encode("utf-8", "ignore"))
+            chunks = []
+            total = 0
+            while True:
+                con_lai = han_chot - time.monotonic()
+                if con_lai <= 0:
+                    raise socket.timeout("whois: qua han chot tong")
+                sock.settimeout(min(timeout, con_lai))
+                data = sock.recv(8192)
+                if not data:
+                    break
+                chunks.append(data)
+                total += len(data)
+                if total > limit:
+                    break
+            return b"".join(chunks).decode("utf-8", "replace")
+        finally:
+            sock.close()
+    raise loi or OSError(f"whois: khong noi duoc {server}")
 
 
 def discover_whois_server(tld: str, timeout: int = 20) -> str:
@@ -396,14 +509,16 @@ def fetch_whois43(domain: str, timeout: int = 20) -> DomainRecord:
         return rec
 
     # Mot so registry chi tra ve con tro toi WHOIS cua registrar -> di them 1 hop
-    referral = re.search(r"^\s*registrar whois server\s*[:\.]\s*(\S+)",
+    # [ \t] chu khong \s - cung ly do nhu _whois_grab: dong "Registrar WHOIS
+    # Server:" rong se nuot chu dau cua dong ke tiep lam ten may chu.
+    referral = re.search(r"^[ \t]*registrar whois server[ \t]*[:\.][ \t]*(\S+)",
                          text, re.MULTILINE | re.IGNORECASE)
     if referral:
         try:
             deep = whois_query(referral.group(1).strip(), domain, timeout=timeout)
             if len(deep) > 120:
                 text = deep + "\n" + text
-        except OSError:
+        except (OSError, ValueError):
             pass
 
     parsed = parse_whois(text)
@@ -431,8 +546,8 @@ class Resolver:
         self.timeout = timeout
         self.workers = max(1, workers)
         self._limits = {
-            "bkns": RateLimiter(bkns_rpm, safety=1.2),
-            "rdap": RateLimiter(rdap_rpm),
+            "bkns": limiter_chung("bkns", bkns_rpm, safety=1.2),
+            "rdap": limiter_chung("rdap", rdap_rpm),
             "whois43": RateLimiter(0),
         }
 
