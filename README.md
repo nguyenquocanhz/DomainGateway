@@ -668,7 +668,9 @@ Biến môi trường ghi đè file: `DG_BKNS_KEY`, `DG_CF_TOKEN`, `DG_WARN_DAYS
 - **`whois.vnnic.vn` timeout** khi gọi từ một số mạng — đó là lý do BKNS đứng trước WHOIS:43
   trong chuỗi dự phòng cho `.vn`.
 - **Không có xác thực người dùng.** Chạy trên `127.0.0.1` là chính. Muốn mở ra mạng LAN thì
-  tự thêm reverse proxy + auth.
+  bật **whitelist IP** ở *Cài đặt → Whitelist truy cập* (IP hoặc dải CIDR, `allowed_ips` /
+  `DG_ALLOWED_IPS`), tốt nhất là kèm reverse proxy + auth. Tên host khác localhost phải khai ở
+  `allowed_hosts` / `DG_ALLOWED_HOSTS` (chống DNS rebinding).
 
 ---
 

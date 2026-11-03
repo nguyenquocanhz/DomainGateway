@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import os
+import tempfile
+import threading
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -82,11 +85,21 @@ def load(path: str = None) -> dict:
     return cfg
 
 
+# CLI va web cung ghi config.json; trong mot tien trinh thi hai request luu cai
+# dat cung luc se doc-sua-ghi chong len nhau -> mat thay doi.
+_KHOA_GHI = threading.Lock()
+
+
 def save(changes: dict, path: str = CONFIG_PATH) -> dict:
     """Ghi mot so khoa vao config.json, giu nguyen moi khoa khac (ke ca chu thich `_...`).
 
     `notify` duoc gop long nhau chu khong thay the ca cum.
     """
+    with _KHOA_GHI:
+        return _save(changes, path)
+
+
+def _save(changes: dict, path: str) -> dict:
     raw = {}
     if os.path.exists(path):
         try:
@@ -103,8 +116,12 @@ def save(changes: dict, path: str = CONFIG_PATH) -> dict:
         else:
             raw[key] = value
 
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as fh:
+    # Ten tam rieng cho moi lan ghi: dung chung "config.json.tmp" thi hai lan ghi
+    # dong thoi (vd. CLI va web) de len nhau, lan thu hai os.replace ra
+    # FileNotFoundError. mkstemp tao file voi quyen 0600 san.
+    fd, tmp = tempfile.mkstemp(prefix=".config-", suffix=".tmp",
+                               dir=os.path.dirname(os.path.abspath(path)))
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
         json.dump(raw, fh, ensure_ascii=False, indent=2)
         fh.write("\n")
     # File nay giu bot token Telegram. Umask mac dinh tren Linux/macOS thuong ra
@@ -115,8 +132,132 @@ def save(changes: dict, path: str = CONFIG_PATH) -> dict:
         os.chmod(tmp, 0o600)
     except OSError:
         pass
-    os.replace(tmp, path)  # ghi nguyen tu, tranh hong file khi bi ngat giua chung
+    try:
+        os.replace(tmp, path)  # ghi nguyen tu, tranh hong file khi bi ngat giua chung
+    except OSError:
+        os.unlink(tmp)
+        raise
     return raw
+
+
+HOST_MAC_DINH = ("localhost", "127.0.0.1", "::1")
+
+
+def ten_host(host: str) -> str:
+    """Bo cong khoi gia tri header Host: "[::1]:8787" -> "::1", "a.com:80" -> "a.com"."""
+    host = (host or "").strip().lower()
+    if host.startswith("["):
+        return host[1:].split("]", 1)[0]
+    return host.rsplit(":", 1)[0] if host.count(":") == 1 else host
+
+
+def tach_danh_sach(gia_tri) -> list:
+    """List hoac chuoi cach bang dau phay / xuong dong / khoang trang -> list chuoi."""
+    if isinstance(gia_tri, str):
+        gia_tri = gia_tri.replace(",", " ").split()
+    if not isinstance(gia_tri, list):
+        return []
+    return [x.strip() for x in gia_tri if isinstance(x, str) and x.strip()]
+
+
+def danh_sach_cau_hinh(cfg: dict, key: str, env: str) -> list:
+    """Bien moi truong thang file, giong moi khoa khac."""
+    return tach_danh_sach(os.environ.get(env) or cfg.get(key) or [])
+
+
+def allowed_hosts(cfg: dict) -> set:
+    """Tap ten host duoc phep goi app (chong DNS rebinding).
+
+    Mac dinh chi localhost. Sau reverse proxy (Host = dg.example.com) hoac mo
+    trong LAN thi khai them o `allowed_hosts` (list hoac chuoi cach dau phay)
+    hay DG_ALLOWED_HOSTS. "*" tat kiem tra.
+    """
+    tap = set(HOST_MAC_DINH)
+    tap.update(ten_host(h) for h in danh_sach_cau_hinh(cfg, "allowed_hosts", "DG_ALLOWED_HOSTS"))
+    nghe = ten_host(str(cfg.get("host") or ""))
+    if nghe and nghe not in ("0.0.0.0", "::"):
+        tap.add(nghe)
+    return tap
+
+
+def mang_ip(danh_sach: list) -> list:
+    """Chuoi IP / CIDR -> ip_network. Nem ValueError neu co muc sai, kem ten muc do."""
+    ket_qua = []
+    for muc in danh_sach:
+        try:
+            ket_qua.append(ipaddress.ip_network(muc, strict=False))
+        except ValueError:
+            raise ValueError(f"IP hoặc dải CIDR không hợp lệ: {muc}") from None
+    return ket_qua
+
+
+def allowed_ips(cfg: dict) -> list:
+    """Whitelist IP client. RONG = khong gioi han (hanh vi cu).
+
+    Muc sai (vd. sua tay config.json go nham) bi bo qua chu khong lam app chet
+    luc khoi dong; trang Cai dat thi kiem chat truoc khi luu.
+    """
+    return _mang_bo_qua_loi(danh_sach_cau_hinh(cfg, "allowed_ips", "DG_ALLOWED_IPS"))
+
+
+def _mang_bo_qua_loi(danh_sach: list) -> list:
+    ket_qua = []
+    for muc in danh_sach:
+        try:
+            ket_qua.append(ipaddress.ip_network(muc, strict=False))
+        except ValueError:
+            pass
+    return ket_qua
+
+
+PROXY_MAC_DINH = ("127.0.0.0/8", "::1/128")
+
+
+def trusted_proxies(cfg: dict) -> list:
+    """Proxy duoc tin header X-Real-IP / X-Forwarded-For.
+
+    Mac dinh chi loopback (nginx cung may). Docker: nginx tren host noi vao
+    container qua gateway cua bridge (172.17.0.1...), nen phai khai them dai do.
+    """
+    ds = danh_sach_cau_hinh(cfg, "trusted_proxies", "DG_TRUSTED_PROXIES") or list(PROXY_MAC_DINH)
+    return _mang_bo_qua_loi(ds)
+
+
+def _ip(text: str):
+    try:
+        ip = ipaddress.ip_address((text or "").strip().split("%", 1)[0])
+    except ValueError:
+        return None
+    return getattr(ip, "ipv4_mapped", None) or ip
+
+
+def ip_client(peer: str, headers, proxies: list) -> str:
+    """IP that cua client. Chi doc header proxy khi request DEN TU proxy tin cay:
+    client noi thang thi tu dat X-Real-IP duoc, tin vao la mo cua whitelist."""
+    ip = _ip(peer)
+    if ip is None:
+        return peer or ""
+    if any(ip in net for net in proxies):
+        real = _ip(headers.get("X-Real-IP", ""))
+        if real is None:
+            # Phan tu CUOI cua X-Forwarded-For la do proxy tin cay them vao;
+            # phan tu dau thi client gui gi cung duoc.
+            xff = [x for x in headers.get("X-Forwarded-For", "").split(",") if x.strip()]
+            real = _ip(xff[-1]) if xff else None
+        if real is not None:
+            return str(real)
+    return str(ip)
+
+
+def ip_duoc_phep(ip_text: str, whitelist: list) -> bool:
+    """Whitelist rong -> moi IP. Loopback LUON duoc: nguoi ngoi truoc may chu
+    khong bao gio tu khoa minh ra ngoai vi go nham whitelist."""
+    if not whitelist:
+        return True
+    ip = _ip(ip_text)
+    if ip is None:
+        return False
+    return ip.is_loopback or any(ip in net for net in whitelist)
 
 
 def make_resolver(cfg: dict):

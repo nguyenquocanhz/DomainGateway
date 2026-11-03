@@ -6,6 +6,7 @@
 # Dockerfile thì COPY . . — thiếu dòng này là token bị nướng thẳng vào image,
 # rồi CI đẩy image đó lên ghcr.io công khai.
 config.json
+.config-*.tmp
 .env
 *.env
 

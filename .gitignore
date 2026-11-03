@@ -2,6 +2,8 @@
 # config.json giữ key BKNS, bot token Telegram và API token Cloudflare.
 # Mẫu để chép ra là config.example.json (mọi trường bí mật đều để rỗng).
 config.json
+# File tạm khi lưu config.json (cũng chứa token) — sót lại nếu tiến trình bị giết giữa chừng
+.config-*.tmp
 .env
 *.env
 

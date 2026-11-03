@@ -176,6 +176,7 @@ def create_app(cfg: dict = None, store: Store = None) -> Flask:
     cfg = cfg or cfgmod.load()
     store = store or Store()
     job = RefreshJob()
+    khoa_cai_dat = threading.Lock()
 
     app = Flask(__name__, template_folder="templates", static_folder="static")
     app.json.ensure_ascii = False
@@ -222,19 +223,67 @@ def create_app(cfg: dict = None, store: Store = None) -> Flask:
     # Sec-Fetch-Site do CHINH trinh duyet dat, trang web khong ghi de duoc. Client
     # khong phai trinh duyet (cli.py, curl, script) khong gui header nay -> cho qua,
     # nen cong cu dong lenh van chay binh thuong.
+    #
+    # "same-site" KHONG duoc tin: moi cong khac tren 127.0.0.1 (dev server cua
+    # du an khac, Jupyter...) deu la same-site voi app nay.
+    #
+    # Thieu Sec-Fetch-Site (Safari < 16.4, Firefox cu, curl) thi bat buoc than
+    # la application/json. Trang web cheo goc muon dat Content-Type do phai qua
+    # CORS preflight, ma app khong tra header CORS nao nen preflight truot.
+    # app.js luon gui header nay, ke ca POST khong co than.
     DOI_TRANG_THAI = {"POST", "PUT", "PATCH", "DELETE"}
-    NGUON_TIN_CAY = {"same-origin", "same-site", "none"}
+    NGUON_TIN_CAY = {"same-origin", "none"}
+
+    def ip_cua_request() -> str:
+        return cfgmod.ip_client(request.remote_addr or "", request.headers,
+                                cfgmod.trusted_proxies(cfg))
+
+    @app.before_request
+    def chan_ip_ngoai_whitelist():
+        # Whitelist doc lai tu cfg moi request: sua o trang Cai dat la co hieu
+        # luc ngay, khong phai khoi dong lai.
+        if cfgmod.ip_duoc_phep(ip_cua_request(), cfgmod.allowed_ips(cfg)):
+            return None
+        return jsonify({
+            "error": "IP của bạn không nằm trong whitelist. Thêm nó ở trang Cài đặt "
+                     "từ máy chạy app, hoặc sửa allowed_ips trong config.json."
+        }), 403
+
+    @app.before_request
+    def chan_host_la():
+        # DNS rebinding: trang evil.com tro ten mien cua chinh no ve 127.0.0.1,
+        # trinh duyet coi la same-origin nen Sec-Fetch-Site lot qua va trang do
+        # doc duoc ca phan hoi - ke ca doi whmcs_url roi goi verify de lay
+        # secret WHMCS. Header Host thi van la evil.com, nen chan o day.
+        host_cho_phep = cfgmod.allowed_hosts(cfg)
+        if "*" in host_cho_phep:
+            return None
+        if cfgmod.ten_host(request.host) in host_cho_phep:
+            return None
+        return jsonify({
+            "error": "Host không được phép. Truy cập qua tên miền hoặc IP khác "
+                     "localhost thì thêm nó vào allowed_hosts trong config.json "
+                     "(hoặc biến môi trường DG_ALLOWED_HOSTS)."
+        }), 403
 
     @app.before_request
     def chan_cheo_trang():
-        if request.method not in DOI_TRANG_THAI:
-            return None
         nguon = request.headers.get("Sec-Fetch-Site")
+        if request.method not in DOI_TRANG_THAI:
+            # GET /api/* cung co tac dung phu: /api/lookup dot quota BKNS chi
+            # bang mot the <img>. Dieu huong cheo trang toi trang chu van cho qua.
+            if request.path.startswith("/api/") and nguon and nguon not in NGUON_TIN_CAY:
+                return jsonify({"error": "Từ chối request chéo trang."}), 403
+            return None
         if nguon and nguon not in NGUON_TIN_CAY:
             return jsonify({
                 "error": "Từ chối request chéo trang. Thao tác này chỉ gọi được từ "
                          "chính giao diện Domain Gateway."
             }), 403
+        if not nguon and not request.is_json:
+            return jsonify({
+                "error": "Thiếu header Content-Type: application/json."
+            }), 415
         return None
 
     # ---- header bao mat ---------------------------------------------------
@@ -352,7 +401,10 @@ def create_app(cfg: dict = None, store: Store = None) -> Flask:
             store.add(
                 domain,
                 provider=_van_ban(payload.get("provider"), ""),
-                tags=[t for t in (payload.get("tags") or []) if isinstance(t, str)],
+                # Chi nhan list, giong api_update: "abc" lap ra tag a, b, c;
+                # so 5 thi TypeError -> 500.
+                tags=([t for t in payload["tags"] if isinstance(t, str)]
+                      if isinstance(payload.get("tags"), list) else []),
                 note=_van_ban(payload.get("note"), ""),
                 manual_expires_at=payload.get("expires_at"),
                 auto_renew=payload.get("auto_renew"),
@@ -551,6 +603,14 @@ def create_app(cfg: dict = None, store: Store = None) -> Flask:
             "whmcs_accesskey_set": bool(cfg.get("whmcs_accesskey")),
             "last_whmcs_sync": store.get_meta("last_whmcs_sync"),
             "last_notify": store.get_meta("last_notify"),
+            # Whitelist: tra nguyen danh sach - day khong phai bi mat, ma la thu
+            # nguoi dung can thay de sua. *_env: bien moi truong dang ghi de,
+            # luu tu web vo ich (khoi dong lai la mat) nen giao dien khoa o lai.
+            "allowed_ips": cfgmod.danh_sach_cau_hinh(cfg, "allowed_ips", "DG_ALLOWED_IPS"),
+            "allowed_ips_env": bool(os.environ.get("DG_ALLOWED_IPS")),
+            "allowed_hosts": cfgmod.danh_sach_cau_hinh(cfg, "allowed_hosts", "DG_ALLOWED_HOSTS"),
+            "allowed_hosts_env": bool(os.environ.get("DG_ALLOWED_HOSTS")),
+            "client_ip": ip_cua_request(),
             "cron_command": (
                 'schtasks /create /tn "DomainGateway" /tr '
                 f'"cmd /c cd /d {ROOT} && python cli.py refresh && python cli.py notify" '
@@ -567,7 +627,8 @@ def create_app(cfg: dict = None, store: Store = None) -> Flask:
             if key in payload and str(payload[key]).strip() != "":
                 try:
                     changes[key] = max(0, int(payload[key]))
-                except (TypeError, ValueError):
+                except (TypeError, ValueError, OverflowError):
+                    # OverflowError: JSON 1e999 la float inf, int(inf) nem loi nay
                     return jsonify({"error": f"Giá trị không hợp lệ cho {key}"}), 400
 
         # Token rong nghia la "giu nguyen cai dang co", khong phai "xoa di"
@@ -609,22 +670,54 @@ def create_app(cfg: dict = None, store: Store = None) -> Flask:
             if gia_tri:
                 changes[key] = gia_tri
 
+        # Whitelist: list rong la tat gioi han, nen "co trong payload" moi la
+        # tin hieu sua - khac token (rong = giu nguyen).
+        if "allowed_ips" in payload:
+            if os.environ.get("DG_ALLOWED_IPS"):
+                return jsonify({"error": "Whitelist IP đang đặt bằng biến môi trường "
+                                         "DG_ALLOWED_IPS, sửa ở đó."}), 400
+            ds = cfgmod.tach_danh_sach(payload["allowed_ips"])
+            try:
+                mang = cfgmod.mang_ip(ds)
+            except ValueError as exc:
+                return jsonify({"error": str(exc)}), 400
+            # Tu khoa minh ra ngoai la loi khong sua duoc tu trinh duyet nua.
+            minh = ip_cua_request()
+            if not cfgmod.ip_duoc_phep(minh, mang):
+                return jsonify({"error": f"Whitelist này chặn chính IP của bạn ({minh}). "
+                                         "Thêm IP đó vào trước khi lưu."}), 400
+            changes["allowed_ips"] = [str(n) for n in mang]
+        if "allowed_hosts" in payload:
+            if os.environ.get("DG_ALLOWED_HOSTS"):
+                return jsonify({"error": "Danh sách host đang đặt bằng biến môi trường "
+                                         "DG_ALLOWED_HOSTS, sửa ở đó."}), 400
+            ds = [cfgmod.ten_host(h) for h in cfgmod.tach_danh_sach(payload["allowed_hosts"])]
+            if any(not h or "/" in h for h in ds):
+                return jsonify({"error": "Tên host không hợp lệ."}), 400
+            minh = cfgmod.ten_host(request.host)
+            if "*" not in ds and minh not in ds and minh not in cfgmod.HOST_MAC_DINH:
+                return jsonify({"error": f"Danh sách này chặn chính host bạn đang dùng ({minh})."}), 400
+            changes["allowed_hosts"] = ds
+
         if not changes:
             return jsonify({"error": "Không có gì để lưu"}), 400
 
-        try:
-            cfgmod.save(changes)
-        except OSError as exc:
-            return jsonify({"error": f"Không ghi được config.json: {exc}"}), 500
+        # Hai lan luu cung luc: ca hai doc-sua-ghi config.json va cung tron vao
+        # cfg -> mot thay doi mat. Khoa chung cho ca hai buoc.
+        with khoa_cai_dat:
+            try:
+                cfgmod.save(changes)
+            except OSError as exc:
+                return jsonify({"error": f"Không ghi được config.json: {exc}"}), 500
 
-        # Cap nhat luon cfg dang chay de khong phai khoi dong lai server
-        for key, value in changes.items():
-            if key == "notify":
-                merged = dict(cfg.get("notify") or {})
-                merged.update(value)
-                cfg["notify"] = merged
-            else:
-                cfg[key] = value
+            # Cap nhat luon cfg dang chay de khong phai khoi dong lai server
+            for key, value in changes.items():
+                if key == "notify":
+                    merged = dict(cfg.get("notify") or {})
+                    merged.update(value)
+                    cfg["notify"] = merged
+                else:
+                    cfg[key] = value
         return api_settings_get()
 
     # ---- Cloudflare -------------------------------------------------------

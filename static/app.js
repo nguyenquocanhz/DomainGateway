@@ -1257,10 +1257,32 @@
       wB.textContent = s.whmcs_configured
         ? (s.last_whmcs_sync ? "Đồng bộ " + relTime(s.last_whmcs_sync) : "Đã cấu hình")
         : "Chưa kết nối";
+
+      renderWhitelist(s);
     } catch (e) {
       toast("Không tải được cài đặt: " + e.message, "err");
     }
     renderPending();
+  }
+
+  function renderWhitelist(s) {
+    const ips = s.allowed_ips || [];
+    $("#wlIps").value = ips.join("\n");
+    $("#wlHosts").value = (s.allowed_hosts || []).join("\n");
+    // Biến môi trường đang ghi đè thì lưu từ web vô ích: khởi động lại là mất.
+    $("#wlIps").disabled = !!s.allowed_ips_env;
+    $("#wlHosts").disabled = !!s.allowed_hosts_env;
+    $("#btnSaveWl").disabled = !!(s.allowed_ips_env && s.allowed_hosts_env);
+    $("#btnAddMyIp").disabled = !!s.allowed_ips_env;
+    $("#wlIpHint").textContent = (s.allowed_ips_env
+      ? "Đang đặt bằng biến môi trường DG_ALLOWED_IPS — sửa ở đó. "
+      : "") + `IP của bạn: ${s.client_ip || "?"}`;
+    $("#wlHostHint").textContent = s.allowed_hosts_env
+      ? "Đang đặt bằng biến môi trường DG_ALLOWED_HOSTS — sửa ở đó."
+      : "localhost, 127.0.0.1 và ::1 luôn được phép.";
+    const b = $("#wlBadge");
+    b.dataset.state = ips.length ? "on" : "off";
+    b.textContent = ips.length ? `Bật · ${ips.length} mục` : "Tắt";
   }
 
   async function saveSettings(body, okMsg) {
@@ -1392,6 +1414,25 @@
         btn.disabled = false;
         btn.textContent = "Gửi tin nhắn thử";
       }
+    });
+
+    $("#btnSaveWl").addEventListener("click", async () => {
+      const tach = (v) => v.split(/[\s,]+/).filter(Boolean);
+      const body = {};
+      if (!state.settings?.allowed_ips_env) body.allowed_ips = tach($("#wlIps").value);
+      if (!state.settings?.allowed_hosts_env) body.allowed_hosts = tach($("#wlHosts").value);
+      const s = await saveSettings(body, "Đã lưu whitelist.");
+      if (s) renderWhitelist(s);
+    });
+
+    $("#btnAddMyIp").addEventListener("click", () => {
+      const ip = state.settings?.client_ip;
+      if (!ip) return;
+      const o = $("#wlIps");
+      const ds = o.value.split(/[\s,]+/).filter(Boolean);
+      if (ds.includes(ip)) { toast("IP này đã có trong danh sách.", "ok"); return; }
+      ds.push(ip);
+      o.value = ds.join("\n");
     });
 
     $("#btnSaveWhmcs").addEventListener("click", async () => {
